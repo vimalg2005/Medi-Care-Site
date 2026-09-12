@@ -4,12 +4,25 @@ import Service from "../models/Service.js";
 // List all service appointments
 export const getServiceAppointments = async (req, res) => {
   try {
-    const { patientClerkId, createdBy, limit = 500, page = 1 } = req.query;
+    const { patientClerkId, createdBy, email, mobile, limit = 500, page = 1 } = req.query;
     const filter = {};
 
     const resolvedCreatedBy = createdBy || patientClerkId;
-    if (resolvedCreatedBy) {
-      filter.createdBy = resolvedCreatedBy;
+    const userOrConditions = [];
+    if (resolvedCreatedBy && resolvedCreatedBy !== "anonymous") {
+      userOrConditions.push({ createdBy: resolvedCreatedBy });
+    }
+    if (email) {
+      userOrConditions.push({ email: String(email).trim().toLowerCase() });
+    }
+    if (mobile) {
+      userOrConditions.push({ mobile: String(mobile).trim() });
+    }
+
+    if (userOrConditions.length > 0) {
+      filter.$or = userOrConditions;
+    } else if (resolvedCreatedBy === "anonymous") {
+      filter.createdBy = "anonymous";
     }
 
     const appointments = await ServiceAppointment.find(filter)
@@ -40,6 +53,7 @@ export const createServiceAppointment = async (req, res) => {
       minute,
       ampm,
       paymentMethod,
+      email,
       createdBy
     } = body;
 
@@ -57,6 +71,7 @@ export const createServiceAppointment = async (req, res) => {
     const appt = new ServiceAppointment({
       patientName,
       mobile,
+      email: email ? String(email).trim().toLowerCase() : "",
       age: age ? Number(age) : undefined,
       gender: gender || "",
       serviceId,

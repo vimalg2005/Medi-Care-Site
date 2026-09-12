@@ -238,14 +238,27 @@ export const loginDoctor = async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
 
-    const match = await bcrypt.compare(password, doc.password);
+    let match = false;
+    if (doc.password.startsWith("$2a$") || doc.password.startsWith("$2b$") || doc.password.startsWith("$2y$")) {
+      match = await bcrypt.compare(password, doc.password);
+    } else {
+      match = doc.password === password;
+      if (match) {
+        try {
+          const salt = await bcrypt.genSalt(10);
+          doc.password = await bcrypt.hash(password, salt);
+          await doc.save();
+        } catch (e) {}
+      }
+    }
+
     if (!match) {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
 
     // Create JWT
     const token = jwt.sign(
-      { id: doc._id, email: doc.email, role: "doctor" },
+      { id: doc._id, email: doc.email, role: "doctor", clerkId: doc.clerkId },
       process.env.JWT_SECRET || "medicare_secret_key",
       { expiresIn: "7d" }
     );
@@ -264,3 +277,201 @@ export const loginDoctor = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// Clerk-based Doctor Authentication & Verification
+export const clerkDoctorAuth = async (req, res) => {
+  try {
+    const { email, clerkId, name, avatar } = req.body || {};
+    const emailLC = (email || "").toLowerCase().trim();
+
+    if (!clerkId && !emailLC) {
+      return res.status(400).json({ success: false, message: "Clerk ID or email is required" });
+    }
+
+    // Look up by clerkId first, or by email
+    let doc = null;
+    if (clerkId) {
+      doc = await Doctor.findOne({ clerkId });
+    }
+    if (!doc && emailLC) {
+      doc = await Doctor.findOne({ email: emailLC });
+    }
+
+    if (!doc) {
+      return res.status(404).json({
+        success: false,
+        notRegistered: true,
+        message: `No doctor profile found for ${emailLC || "this Clerk account"}. Link an existing profile or register.`,
+      });
+    }
+
+    let needsSave = false;
+    if (clerkId && doc.clerkId !== clerkId) {
+      doc.clerkId = clerkId;
+      needsSave = true;
+    }
+    if (avatar && !doc.imageUrl) {
+      doc.imageUrl = avatar;
+      needsSave = true;
+    }
+    if (needsSave) {
+      await doc.save();
+    }
+
+    const token = jwt.sign(
+      { id: doc._id, email: doc.email, role: "doctor", clerkId: doc.clerkId },
+      process.env.JWT_SECRET || "medicare_secret_key",
+      { expiresIn: "7d" }
+    );
+
+    const out = normalizeDocForClient(doc);
+    delete out.password;
+
+    return res.json({
+      success: true,
+      token,
+      data: out,
+      doctor: out,
+    });
+  } catch (err) {
+    console.error("clerkDoctorAuth error:", err);
+    return res.status(500).json({ success: false, message: "Server error during Clerk doctor verification" });
+  }
+};
+
+// Link an existing doctor profile with Clerk account
+export const clerkDoctorLink = async (req, res) => {
+  try {
+    const { email, password, clerkId } = req.body || {};
+    const emailLC = (email || "").toLowerCase().trim();
+
+    if (!emailLC || !password || !clerkId) {
+      return res.status(400).json({ success: false, message: "Email, password, and Clerk ID are required" });
+    }
+
+    const doc = await Doctor.findOne({ email: emailLC });
+    if (!doc) {
+      return res.status(404).json({ success: false, message: "Doctor profile not found with that email" });
+    }
+
+    let match = false;
+    if (doc.password.startsWith("$2a$") || doc.password.startsWith("$2b$") || doc.password.startsWith("$2y$")) {
+      match = await bcrypt.compare(password, doc.password);
+    } else {
+      match = doc.password === password;
+    }
+
+    if (!match) {
+      return res.status(401).json({ success: false, message: "Incorrect doctor password" });
+    }
+
+    doc.clerkId = clerkId;
+    if (!doc.password.startsWith("$2")) {
+      const salt = await bcrypt.genSalt(10);
+      doc.password = await bcrypt.hash(password, salt);
+    }
+    await doc.save();
+
+    const token = jwt.sign(
+      { id: doc._id, email: doc.email, role: "doctor", clerkId: doc.clerkId },
+      process.env.JWT_SECRET || "medicare_secret_key",
+      { expiresIn: "7d" }
+    );
+
+    const out = normalizeDocForClient(doc);
+    delete out.password;
+
+    return res.json({
+      success: true,
+      message: "Doctor profile successfully linked to Clerk account",
+      token,
+      data: out,
+      doctor: out,
+    });
+  } catch (err) {
+    console.error("clerkDoctorLink error:", err);
+    return res.status(500).json({ success: false, message: "Server error during profile linking" });
+  }
+};
+
+// Register a new doctor profile via Clerk
+export const clerkDoctorRegister = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const emailLC = (body.email || "").toLowerCase().trim();
+    const clerkId = body.clerkId;
+
+    if (!emailLC || !clerkId || !body.name) {
+      return res.status(400).json({ success: false, message: "Name, email, and Clerk ID are required" });
+    }
+
+    const existing = await Doctor.findOne({ $or: [{ email: emailLC }, { clerkId }] });
+    if (existing) {
+      return res.status(409).json({ success: false, message: "Doctor profile already exists for this email or Clerk account" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(`clerk_managed_${clerkId}_${Date.now()}`, salt);
+
+    const schedule = parseScheduleInput(body.schedule || {});
+
+    const doc = new Doctor({
+      email: emailLC,
+      password: hashedPassword,
+      name: body.name,
+      clerkId,
+      specialization: body.specialization || "General Physician",
+      imageUrl: body.imageUrl || body.avatar || null,
+      availability: body.availability || "Available",
+      experience: body.experience || "1+ years",
+      qualifications: body.qualifications || "MBBS",
+      location: body.location || "Main Clinic",
+      about: body.about || `Dr. ${body.name} is a dedicated healthcare specialist.`,
+      fee: body.fee !== undefined ? Number(body.fee) : 500,
+      schedule,
+      success: "98%",
+      patients: "100+",
+      rating: 5.0,
+      isVerified: true,
+    });
+
+    await doc.save();
+
+    const token = jwt.sign(
+      { id: doc._id, email: doc.email, role: "doctor", clerkId: doc.clerkId },
+      process.env.JWT_SECRET || "medicare_secret_key",
+      { expiresIn: "7d" }
+    );
+
+    const out = normalizeDocForClient(doc);
+    delete out.password;
+
+    return res.status(201).json({
+      success: true,
+      message: "Doctor profile created and verified with Clerk successfully",
+      token,
+      data: out,
+      doctor: out,
+    });
+  } catch (err) {
+    console.error("clerkDoctorRegister error:", err);
+    return res.status(500).json({ success: false, message: "Server error during doctor registration" });
+  }
+};
+
+// Delete doctor (from Admin panel)
+export const deleteDoctor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await Doctor.findByIdAndDelete(id);
+    if (!doc) {
+      return res.status(404).json({ success: false, message: "Doctor not found" });
+    }
+    return res.json({ success: true, message: "Doctor deleted successfully" });
+  } catch (err) {
+    console.error("deleteDoctor error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+

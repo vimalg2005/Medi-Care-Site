@@ -27,6 +27,56 @@ export const getServiceById = async (req, res) => {
 };
 
 // Create service
+const months = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12"
+};
+
+function normalizeSlotsInput(rawSlots) {
+  if (!rawSlots) return {};
+  let parsed = rawSlots;
+  if (typeof rawSlots === "string") {
+    try {
+      parsed = JSON.parse(rawSlots);
+    } catch {
+      return {};
+    }
+  }
+
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  const out = {};
+  if (Array.isArray(parsed)) {
+    parsed.forEach((slotStr) => {
+      if (!slotStr || typeof slotStr !== "string") return;
+      const matchCustom = slotStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s*•\s*(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+      if (matchCustom) {
+        const day = matchCustom[1].padStart(2, "0");
+        const monthKey = matchCustom[2].toLowerCase();
+        const mm = months[monthKey] || "01";
+        const yyyy = matchCustom[3];
+        const time = matchCustom[4].trim();
+        const dateKey = `${yyyy}-${mm}-${day}`;
+        if (!out[dateKey]) out[dateKey] = [];
+        if (!out[dateKey].includes(time)) out[dateKey].push(time);
+        return;
+      }
+      const matchIso = slotStr.match(/^(\d{4}-\d{2}-\d{2})(?:\s*•\s*|\s+)(.*)$/i);
+      if (matchIso) {
+        const dateKey = matchIso[1];
+        const time = (matchIso[2] || "10:00 AM").trim();
+        if (!out[dateKey]) out[dateKey] = [];
+        if (!out[dateKey].includes(time)) out[dateKey].push(time);
+        return;
+      }
+    });
+  }
+  return out;
+}
+
+// Create service
 export const createService = async (req, res) => {
   try {
     const body = req.body || {};
@@ -34,26 +84,40 @@ export const createService = async (req, res) => {
       return res.status(400).json({ success: false, message: "Service name is required" });
     }
 
-    let slots = {};
-    if (body.slots) {
+    let imageUrl = body.imageUrl || null;
+    let imagePublicId = body.imagePublicId || null;
+    if (req.file) {
+      imageUrl = `/uploads/${req.file.filename}`;
+      imagePublicId = req.file.filename;
+    }
+
+    let instructions = [];
+    if (body.instructions) {
       try {
-        slots = typeof body.slots === "string" ? JSON.parse(body.slots) : body.slots;
-      } catch (err) {
-        slots = {};
+        instructions = typeof body.instructions === "string" ? JSON.parse(body.instructions) : body.instructions;
+      } catch {
+        instructions = [];
       }
     }
+
+    const slots = normalizeSlotsInput(body.slots);
+    const dates = Object.keys(slots);
+
+    const isAvailable = body.availability !== undefined 
+      ? (body.availability === "available" || body.availability === "true" || body.availability === true)
+      : (body.available !== undefined ? body.available : true);
 
     const service = new Service({
       name: body.name,
       about: body.about || "",
       shortDescription: body.shortDescription || "",
       price: body.price !== undefined ? Number(body.price) : 0,
-      available: body.available !== undefined ? body.available : true,
-      imageUrl: body.imageUrl || null,
-      imagePublicId: body.imagePublicId || null,
-      dates: body.dates || [],
-      slots: slots,
-      instructions: body.instructions || [],
+      available: isAvailable,
+      imageUrl,
+      imagePublicId,
+      dates,
+      slots,
+      instructions,
     });
 
     await service.save();
@@ -79,20 +143,34 @@ export const updateService = async (req, res) => {
     if (body.about !== undefined) service.about = body.about;
     if (body.shortDescription !== undefined) service.shortDescription = body.shortDescription;
     if (body.price !== undefined) service.price = Number(body.price);
-    if (body.available !== undefined) service.available = body.available;
-    if (body.imageUrl !== undefined) service.imageUrl = body.imageUrl;
-    if (body.imagePublicId !== undefined) service.imagePublicId = body.imagePublicId;
-    if (body.dates !== undefined) service.dates = body.dates;
     
-    if (body.slots !== undefined) {
-      try {
-        service.slots = typeof body.slots === "string" ? JSON.parse(body.slots) : body.slots;
-      } catch (err) {
-        // keep old
-      }
+    if (body.availability !== undefined) {
+      service.available = (body.availability === "available" || body.availability === "true" || body.availability === true);
+    } else if (body.available !== undefined) {
+      service.available = body.available;
     }
 
-    if (body.instructions !== undefined) service.instructions = body.instructions;
+    if (req.file) {
+      service.imageUrl = `/uploads/${req.file.filename}`;
+      service.imagePublicId = req.file.filename;
+    } else if (body.imageUrl !== undefined) {
+      service.imageUrl = body.imageUrl;
+    }
+
+    if (body.imagePublicId !== undefined) service.imagePublicId = body.imagePublicId;
+    
+    if (body.slots !== undefined) {
+      service.slots = normalizeSlotsInput(body.slots);
+      service.dates = Object.keys(service.slots);
+    }
+
+    if (body.instructions !== undefined) {
+      try {
+        service.instructions = typeof body.instructions === "string" ? JSON.parse(body.instructions) : body.instructions;
+      } catch {
+        service.instructions = body.instructions;
+      }
+    }
 
     await service.save();
     return res.json({ success: true, data: service, service });

@@ -110,12 +110,37 @@ export default function DashboardPage() {
     };
   }, []);
 
+  const [stats, setStats] = useState({
+    totalAppointments: 0,
+    completed: 0,
+    canceled: 0,
+    revenue: 0,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadStats() {
+      try {
+        const res = await fetch(`${API_BASE}/api/appointments/stats`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (mounted && json.stats) {
+          setStats(json.stats);
+        }
+      } catch (e) {}
+    }
+    loadStats();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const totals = useMemo(() => {
     const totalDoctors = doctors.length;
-    const totalAppointments = doctors.reduce((s, d) => s + safeNumber(d.appointments?.total, 0), 0);
-    const totalEarnings = doctors.reduce((s, d) => s + safeNumber(d.earnings, 0), 0);
-    const completed = doctors.reduce((s, d) => s + safeNumber(d.appointments?.completed, 0), 0);
-    const canceled = doctors.reduce((s, d) => s + safeNumber(d.appointments?.canceled, 0), 0);
+    const totalAppointments = stats.totalAppointments || doctors.reduce((s, d) => s + safeNumber(d.appointments?.total, 0), 0);
+    const totalEarnings = stats.revenue || doctors.reduce((s, d) => s + safeNumber(d.earnings, 0), 0);
+    const completed = stats.completed || doctors.reduce((s, d) => s + safeNumber(d.appointments?.completed, 0), 0);
+    const canceled = stats.canceled || doctors.reduce((s, d) => s + safeNumber(d.appointments?.canceled, 0), 0);
     return {
       totalDoctors,
       totalAppointments,
@@ -123,7 +148,7 @@ export default function DashboardPage() {
       completed,
       canceled,
     };
-  }, [doctors]);
+  }, [doctors, stats]);
 
   const filteredDoctors = useMemo(() => {
     if (!query) return doctors;

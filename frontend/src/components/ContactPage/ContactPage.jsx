@@ -111,7 +111,7 @@ export default function ContactPage() {
       form.department || "N/A"
     }\nService: ${form.service || "N/A"}\nMessage: ${form.message}`;
 
-    const url = `https://wa.me/8299431275?text=${encodeURIComponent(text)}`;
+    const url = `https://wa.me/919660802511?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
 
     setForm(initial);
@@ -288,7 +288,9 @@ export default function ContactPage() {
             </div>
             <div className={contactPageStyles.infoItem + " text-slate-700 font-medium"}>
               <Phone size={18} className="text-emerald-600" />
-              <span>+91 8299431275</span>
+              <a href="https://wa.me/919660802511" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-700 hover:underline">
+                +91 9660802511
+              </a>
             </div>
             <div className={contactPageStyles.infoItem + " text-slate-700 font-medium"}>
               <Mail size={18} className="text-emerald-600" />

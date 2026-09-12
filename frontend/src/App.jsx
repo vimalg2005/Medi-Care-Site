@@ -165,7 +165,7 @@ const HomeView = () => {
                       Book Appointment Now
                     </div>
                   </Link>
-                  <a href="tel:+918299431275" className={bannerStyles.emergencyButton}>
+                  <a href="tel:+919660802511" className={bannerStyles.emergencyButton}>
                     <div className={bannerStyles.emergencyButtonContent}>
                       <PhoneCall className={bannerStyles.emergencyButtonIcon} /> Emergency Line
                     </div>
@@ -197,6 +197,8 @@ const HomeView = () => {
     </div>
   );
 };
+
+const STORAGE_KEY = "doctorToken_v1";
 
 // Doctor Admin Dashboard Redirect Wrapper
 const DoctorDashboardWrapper = () => {

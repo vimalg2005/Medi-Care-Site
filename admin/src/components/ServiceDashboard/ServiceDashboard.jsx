@@ -61,10 +61,10 @@ export default function ServiceDashboard({ services: servicesProp = null }) {
         setError(null);
       }
 
-      // Fetch diagnostic appointments stats
-      const res = await fetch(`${API_BASE}/api/service-appointments/stats/summary`);
+      // Fetch diagnostic services
+      const res = await fetch(`${API_BASE}/api/services`);
       if (!res.ok) {
-        throw new Error(`Failed to fetch services stats (${res.status})`);
+        throw new Error(`Failed to fetch services (${res.status})`);
       }
       const body = await res.json();
 

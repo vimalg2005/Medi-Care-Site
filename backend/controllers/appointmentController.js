@@ -21,23 +21,43 @@ const buildFrontendBase = (req) => {
 // Get appointments (with filter)
 export const getAppointments = async (req, res) => {
   try {
-    const { doctorId, mobile, status, search = "", limit: limitRaw = 50, page: pageRaw = 1, patientClerkId, createdBy } = req.query;
+    const { doctorId, mobile, status, search = "", limit: limitRaw = 50, page: pageRaw = 1, patientClerkId, createdBy, email } = req.query;
     const limit = Math.min(200, Math.max(1, parseInt(limitRaw, 10) || 50));
     const page = Math.max(1, parseInt(pageRaw, 10) || 1);
     const skip = (page - 1) * limit;
 
     const filter = {};
     if (doctorId) filter.doctorId = doctorId;
-    if (mobile) filter.mobile = mobile;
     if (status) filter.status = status;
     
-    // Support filtering by user
+    // Support filtering by user ID, email, or mobile lookup
     const resolvedCreatedBy = createdBy || patientClerkId;
-    if (resolvedCreatedBy) filter.createdBy = resolvedCreatedBy;
+    const userOrConditions = [];
+    if (resolvedCreatedBy && resolvedCreatedBy !== "anonymous") {
+      userOrConditions.push({ createdBy: resolvedCreatedBy });
+    }
+    if (email) {
+      userOrConditions.push({ email: String(email).trim().toLowerCase() });
+    }
+    if (mobile) {
+      userOrConditions.push({ mobile: String(mobile).trim() });
+    }
+
+    if (userOrConditions.length > 0) {
+      filter.$or = userOrConditions;
+    } else if (resolvedCreatedBy === "anonymous") {
+      filter.createdBy = "anonymous";
+    }
 
     if (search) {
       const re = new RegExp(search, "i");
-      filter.$or = [{ patientName: re }, { mobile: re }, { doctorName: re }];
+      const searchConditions = [{ patientName: re }, { mobile: re }, { doctorName: re }];
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchConditions }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchConditions;
+      }
     }
 
     const appointments = await Appointment.find(filter)
@@ -111,6 +131,7 @@ export const createAppointment = async (req, res) => {
       doctorImage,
       patientName: String(patientName).trim(),
       mobile: String(mobile).trim(),
+      email: email ? String(email).trim().toLowerCase() : "",
       age: age ? Number(age) : undefined,
       gender: gender ? String(gender) : "",
       date: String(date),
@@ -124,41 +145,49 @@ export const createAppointment = async (req, res) => {
       sessionId: null,
     };
 
+    let created;
+
     // Free appointment
     if (numericFee === 0) {
-      const created = await Appointment.create({
+      created = await Appointment.create({
         ...base,
         status: "Confirmed",
         payment: { method: base.payment.method, status: "Paid", amount: 0 },
         paidAt: new Date(),
       });
-      return res.status(201).json({ success: true, appointment: created, checkoutUrl: null });
-    }
-
-    // Cash payment
-    if (paymentMethod === "Cash" || !paymentMethod) {
-      const created = await Appointment.create({
+    } else if (paymentMethod === "Cash" || !paymentMethod) {
+      // Cash payment
+      created = await Appointment.create({
         ...base,
         status: "Pending",
         payment: { method: "Cash", status: "Pending", amount: numericFee },
       });
-      return res.status(201).json({ success: true, appointment: created, checkoutUrl: null });
+    } else {
+      // Online payment
+      const frontBase = buildFrontendBase(req);
+      const session_id = `mock_sess_${Date.now()}`;
+      created = await Appointment.create({
+        ...base,
+        sessionId: session_id,
+        payment: { ...base.payment, status: "Paid", providerId: `mock_provider_${Date.now()}` },
+        status: "Confirmed",
+        paidAt: new Date(),
+      });
     }
 
-    // Online payment: Simulate payment redirect checkouts to avoid Stripe requirement
-    const frontBase = buildFrontendBase(req);
-    const session_id = `mock_sess_${Date.now()}`;
-    const checkoutUrl = `${frontBase}/appointments?session_id=${session_id}`;
+    // Connect appointment with doctor's profile by incrementing totalAppointments
+    try {
+      await Doctor.findByIdAndUpdate(doctorId, { 
+        $inc: { 
+          totalAppointments: 1, 
+          revenue: created.payment?.status === "Paid" ? numericFee : 0 
+        } 
+      });
+    } catch (docErr) {
+      console.warn("Doctor counter update notice:", docErr.message);
+    }
 
-    const created = await Appointment.create({
-      ...base,
-      sessionId: session_id,
-      payment: { ...base.payment, status: "Paid", providerId: `mock_provider_${Date.now()}` },
-      status: "Confirmed", // auto confirm for mock
-      paidAt: new Date(),
-    });
-
-    return res.status(201).json({ success: true, appointment: created, checkoutUrl });
+    return res.status(201).json({ success: true, appointment: created });
   } catch (err) {
     console.error("createAppointment error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
@@ -268,7 +297,9 @@ export const cancelAppointment = async (req, res) => {
 export const getStats = async (req, res) => {
   try {
     const totalAppointments = await Appointment.countDocuments();
-    const completed = await Appointment.countDocuments({ status: "Completed" });
+    const completed = await Appointment.countDocuments({ 
+      status: { $in: ["Completed", "Confirmed"] } 
+    });
     const canceled = await Appointment.countDocuments({ status: "Canceled" });
 
     const paidAgg = await Appointment.aggregate([

@@ -22,6 +22,8 @@ const doctorSchema = new mongoose.Schema(
     success: { type: String, default: "" },
     patients: { type: String, default: "" },
     rating: { type: Number, default: 0 },
+    clerkId: { type: String, default: null, index: true },
+    isVerified: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

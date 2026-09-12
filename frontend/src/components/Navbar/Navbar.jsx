@@ -1,9 +1,47 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, LogIn, LogOut, LayoutDashboard, Heart, Calendar } from "lucide-react";
+import { Menu, X, LogIn, LogOut, LayoutDashboard, Heart, Calendar, User } from "lucide-react";
+import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import { navbarStyles } from "../../assets/themeStyles.js";
 
 const STORAGE_KEY = "doctorToken_v1";
+
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const isClerkKeyConfigured = 
+  Boolean(PUBLISHABLE_KEY) && 
+  (PUBLISHABLE_KEY.startsWith("pk_test_") || PUBLISHABLE_KEY.startsWith("pk_live_")) &&
+  PUBLISHABLE_KEY !== "pk_test_your_clerk_publishable_key_here";
+
+const ClerkNavAuth = () => {
+  return (
+    <>
+      <SignedIn>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/appointments"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition"
+          >
+            <Calendar className="w-3.5 h-3.5" /> My Bookings
+          </Link>
+          <UserButton
+            afterSignOutUrl="/"
+            appearance={{
+              elements: {
+                avatarBox: "w-9 h-9 ring-2 ring-emerald-500/40 hover:scale-105 transition",
+              },
+            }}
+          />
+        </div>
+      </SignedIn>
+      <SignedOut>
+        <Link to="/login" className={navbarStyles.loginButton}>
+          <LogIn className={navbarStyles.loginIcon} /> Sign In
+        </Link>
+      </SignedOut>
+    </>
+  );
+};
+
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -149,11 +187,13 @@ export default function Navbar() {
                   </Link>
                   <button
                     onClick={handleDoctorLogout}
-                    className="hidden lg:inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold text-emerald-600 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all"
+                    className="hidden lg:inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold text-emerald-600 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" /> Logout
                   </button>
                 </>
+              ) : isClerkKeyConfigured ? (
+                <ClerkNavAuth />
               ) : isPatientLoggedIn ? (
                 <button
                   onClick={handlePatientLogout}
@@ -166,7 +206,7 @@ export default function Navbar() {
                   to="/login"
                   className={navbarStyles.loginButton}
                 >
-                  <LogIn className={navbarStyles.loginIcon} /> Doctor Login
+                  <LogIn className={navbarStyles.loginIcon} /> Sign In
                 </Link>
               )}
 
@@ -224,6 +264,24 @@ export default function Navbar() {
                     <LogOut className="w-4 h-4" /> Logout
                   </button>
                 </div>
+              ) : isClerkKeyConfigured ? (
+                <div className="flex flex-col gap-2">
+                  <SignedIn>
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                      <span className="text-sm font-semibold text-emerald-800">Patient Account</span>
+                      <UserButton afterSignOutUrl="/" />
+                    </div>
+                  </SignedIn>
+                  <SignedOut>
+                    <Link
+                      to="/login"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-all shadow-sm"
+                    >
+                      <LogIn className="w-4 h-4" /> Sign In
+                    </Link>
+                  </SignedOut>
+                </div>
               ) : isPatientLoggedIn ? (
                 <button
                   onClick={() => {
@@ -238,9 +296,9 @@ export default function Navbar() {
                 <Link
                   to="/login"
                   onClick={() => setIsOpen(false)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-all"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-all shadow-sm"
                 >
-                  <LogIn className="w-4 h-4" /> Doctor Login
+                  <LogIn className="w-4 h-4" /> Sign In
                 </Link>
               )}
             </div>

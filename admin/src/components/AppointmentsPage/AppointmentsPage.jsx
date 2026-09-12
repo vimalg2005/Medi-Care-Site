@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
 import { 
-  Calendar, BadgeIndianRupee, Search, X, Filter, AlertCircle 
+  Calendar, BadgeIndianRupee, Search, X, Filter, AlertCircle,
+  Phone, Mail, User, CreditCard, Wallet, Stethoscope 
 } from "lucide-react";
 import { pageStyles, statusClasses } from "../../assets/themeStyles.js";
 
@@ -61,16 +61,24 @@ export default function AppointmentsPage() {
       const items = list.map((a) => {
         const doctorName = (a.doctorId && a.doctorId.name) || a.doctorName || "";
         const speciality = (a.doctorId && a.doctorId.specialization) || a.speciality || "General";
+        const doctorImage = (a.doctorId && (a.doctorId.imageUrl || a.doctorId.image)) || a.doctorImage?.url || "";
         const fee = typeof a.fees === "number" ? a.fees : a.fee || 0;
+        const paymentMethod = a.payment?.method || "Cash";
+        const paymentStatus = a.payment?.status || "Pending";
         return {
           id: a._id || a.id,
           patientName: a.patientName || "",
           age: a.age || "",
           gender: a.gender || "",
           mobile: a.mobile || "",
+          email: a.email || "",
+          doctorId: (a.doctorId && (a.doctorId._id || a.doctorId.id)) || a.doctorId || "",
           doctorName,
           speciality,
+          doctorImage,
           fee,
+          paymentMethod,
+          paymentStatus,
           slot: {
             date: a.date || (a.slot && a.slot.date) || "",
             time: a.time || (a.slot && a.slot.time) || "00:00 AM",
@@ -112,7 +120,8 @@ export default function AppointmentsPage() {
         (a.doctorName || "").toLowerCase().includes(q) ||
         (a.speciality || "").toLowerCase().includes(q) ||
         (a.patientName || "").toLowerCase().includes(q) ||
-        (a.mobile || "").toLowerCase().includes(q)
+        (a.mobile || "").toLowerCase().includes(q) ||
+        (a.email || "").toLowerCase().includes(q)
       );
     });
   }, [appointments, query, filterDate, filterSpeciality]);
@@ -282,30 +291,69 @@ export default function AppointmentsPage() {
                   className={s.card}
                 >
                   <div className={s.cardHeader}>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      {/* Patient Name & Details */}
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 font-bold text-xs">
+                          <User className="w-3.5 h-3.5" />
+                        </div>
                         <h3 className={s.cardTitle}>{a.patientName}</h3>
                         <div className={s.patientInfo}>
-                          <span>{a.age ? `${a.age} yrs` : ""}</span>
-                          {a.age && a.gender && <span>·</span>}
-                          <span>{a.gender}</span>
+                          {a.age ? <span>{a.age} yrs</span> : null}
+                          {a.age && a.gender ? <span>·</span> : null}
+                          {a.gender ? <span>{a.gender}</span> : null}
                         </div>
                       </div>
-                      <div className={s.doctorInfo}>
-                        {a.doctorName} · <span className={s.doctorSpeciality}>{a.speciality}</span>
+
+                      {/* Patient Contact Numbers / Email */}
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mb-2 pl-9">
+                        {a.mobile ? (
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-emerald-600" />
+                            <a href={`tel:${a.mobile}`} className="hover:text-emerald-700 font-medium">{a.mobile}</a>
+                          </span>
+                        ) : null}
+                        {a.email ? (
+                          <span className="flex items-center gap-1">
+                            <Mail className="w-3 h-3 text-emerald-600" />
+                            <span className="truncate max-w-[170px]">{a.email}</span>
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {/* Doctor Details */}
+                      <div className="flex items-center gap-2 pl-9 mt-1">
+                        {a.doctorImage ? (
+                          <img src={a.doctorImage} alt={a.doctorName} className="w-6 h-6 rounded-full object-cover border border-emerald-200" />
+                        ) : (
+                          <Stethoscope className="w-4 h-4 text-emerald-600" />
+                        )}
+                        <div className={s.doctorInfo}>
+                          <span className="font-semibold text-emerald-950">Dr. {a.doctorName.replace(/^Dr\.\s*/i, '')}</span> · <span className={s.doctorSpeciality}>{a.speciality}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <div className={s.feeLabel}>Fees</div>
                       <div className={s.feeAmount}>
                         <BadgeIndianRupee size={16} />
                         <span>{a.fee}</span>
                       </div>
+                      <div className="mt-1">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          a.paymentStatus === 'Paid' 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {a.paymentMethod === 'Online' ? <CreditCard className="w-2.5 h-2.5" /> : <Wallet className="w-2.5 h-2.5" />}
+                          {a.paymentStatus}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 flex-wrap border-t border-slate-50 pt-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap border-t border-slate-50 pt-2.5 mt-2">
                     <div className={s.slotContainer}>
                       <Calendar size={14} className={s.slotIcon} />
                       <span className="text-xs font-semibold">

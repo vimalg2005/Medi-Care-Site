@@ -5,11 +5,19 @@ import {
   CheckCircle, Shield, User, Phone, Mail, AlertCircle 
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
+import { useUser } from "@clerk/clerk-react";
 import { serviceDetailStyles, toastStyles } from "../../assets/themeStyles.js";
 
 import { API_BASE } from "../../config.js";
+import { openRazorpayModal } from "../../utils/razorpay.js";
 
-export default function ServiceDetailPage() {
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const isClerkKeyConfigured = 
+  Boolean(PUBLISHABLE_KEY) && 
+  (PUBLISHABLE_KEY.startsWith("pk_test_") || PUBLISHABLE_KEY.startsWith("pk_live_")) &&
+  PUBLISHABLE_KEY !== "pk_test_your_clerk_publishable_key_here";
+
+function ServiceDetailPageContent({ currentUser, isClerk }) {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -25,20 +33,18 @@ export default function ServiceDetailPage() {
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("Male");
   const [email, setEmail] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentMethod, setPaymentMethod] = useState("Online");
   const [bookingBusy, setBookingBusy] = useState(false);
 
-  // Load patient details if present in localStorage
+  // Load patient details from Clerk or localStorage
   useEffect(() => {
-    try {
-      const patientStr = localStorage.getItem("patientUser_v1");
-      if (patientStr) {
-        const patient = JSON.parse(patientStr);
-        setPatientName(patient.name || "");
-        setEmail(patient.email || "");
-      }
-    } catch (e) {}
-  }, []);
+    if (currentUser) {
+      const name = currentUser.fullName || currentUser.name || "";
+      const em = currentUser.primaryEmailAddress?.emailAddress || currentUser.email || "";
+      if (name && !patientName) setPatientName(name);
+      if (em && !email) setEmail(em);
+    }
+  }, [currentUser]);
 
   // Fetch Service Details
   useEffect(() => {
@@ -51,6 +57,7 @@ export default function ServiceDetailPage() {
 
         if (!res.ok) {
           setError(json?.message || "Service details not found");
+          setService(null);
           return;
         }
 
@@ -58,7 +65,7 @@ export default function ServiceDetailPage() {
         setService(data);
 
         // Pre-select first date in slot schedule map
-        if (data.slots) {
+        if (data.slots && typeof data.slots === "object") {
           const dates = Object.keys(data.slots);
           if (dates.length > 0) {
             setSelectedDate(dates[0]);
@@ -74,11 +81,38 @@ export default function ServiceDetailPage() {
     loadService();
   }, [id]);
 
-  // Formatted date options
+  // Formatted date options with rolling 7-day schedule fallback
+  const slotsMap = useMemo(() => {
+    const defaultSlots = ["09:00 AM", "10:30 AM", "12:00 PM", "02:30 PM", "04:00 PM"];
+    if (service?.slots && typeof service.slots === "object" && !Array.isArray(service.slots) && Object.keys(service.slots).length > 0) {
+      return service.slots;
+    }
+
+    if (Array.isArray(service?.slots) && service.slots.length > 0) {
+      const fallback = {};
+      for (let i = 0; i < 7; i++) {
+        const dt = new Date();
+        dt.setDate(dt.getDate() + i);
+        const iso = dt.toISOString().split("T")[0];
+        fallback[iso] = service.slots;
+      }
+      return fallback;
+    }
+
+    const fallback = {};
+    for (let i = 0; i < 7; i++) {
+      const dt = new Date();
+      dt.setDate(dt.getDate() + i);
+      const iso = dt.toISOString().split("T")[0];
+      fallback[iso] = defaultSlots;
+    }
+    return fallback;
+  }, [service]);
+
   const availableDates = useMemo(() => {
-    if (!service || !service.slots) return [];
-    return Object.keys(service.slots).map(dateStr => {
-      const d = new Date(dateStr);
+    if (!slotsMap) return [];
+    return Object.keys(slotsMap).sort().map(dateStr => {
+      const d = new Date(dateStr + "T00:00:00");
       return {
         dateStr,
         day: d.getDate(),
@@ -86,13 +120,28 @@ export default function ServiceDetailPage() {
         weekday: d.toLocaleDateString("en-US", { weekday: "short" }),
       };
     });
-  }, [service]);
+  }, [slotsMap]);
+
+  // Set default selected date
+  useEffect(() => {
+    if (availableDates.length > 0 && (!selectedDate || !availableDates.some(d => d.dateStr === selectedDate))) {
+      setSelectedDate(availableDates[0].dateStr);
+    }
+  }, [availableDates, selectedDate]);
 
   // Available slots for selected date
   const availableSlots = useMemo(() => {
-    if (!service || !service.slots || !selectedDate) return [];
-    return service.slots[selectedDate] || [];
-  }, [service, selectedDate]);
+    if (!slotsMap || !selectedDate) return [];
+    const slots = slotsMap[selectedDate];
+    return Array.isArray(slots) ? slots : [];
+  }, [slotsMap, selectedDate]);
+
+  // Set default selected slot
+  useEffect(() => {
+    if (availableSlots.length > 0 && (!selectedTime || !availableSlots.includes(selectedTime))) {
+      setSelectedTime(availableSlots[0]);
+    }
+  }, [availableSlots, selectedTime]);
 
   const handleBook = async (e) => {
     e.preventDefault();
@@ -121,17 +170,10 @@ export default function ServiceDetailPage() {
     if (match) {
       hour = Number(match[1]);
       minute = Number(match[2]);
-      ampm = match[3] || "AM";
+      ampm = (match[3] || "AM").toUpperCase();
     }
 
-    let createdBy = "anonymous";
-    try {
-      const patUser = localStorage.getItem("patientUser_v1");
-      if (patUser) {
-        const userObj = JSON.parse(patUser);
-        createdBy = userObj.id || userObj._id || createdBy;
-      }
-    } catch (err) {}
+    const createdBy = currentUser?.id || currentUser?._id || "anonymous";
 
     const payload = {
       patientName,
@@ -146,6 +188,7 @@ export default function ServiceDetailPage() {
       minute,
       ampm,
       paymentMethod,
+      email,
       createdBy,
     };
 
@@ -164,13 +207,59 @@ export default function ServiceDetailPage() {
         return;
       }
 
-      toast.success("Service Appointment booked successfully!", {
-        style: toastStyles?.successToast,
-      });
+      const createdAppt = json.data || json.appointment;
+      const apptId = createdAppt?._id || createdAppt?.id;
 
-      setTimeout(() => {
-        navigate("/appointments");
-      }, 800);
+      if (paymentMethod === "Online" && (service.price || 0) > 0 && apptId) {
+        toast.loading("Initiating secure Razorpay checkout...", { id: "payment-toast" });
+
+        const orderRes = await fetch(`${API_BASE}/api/payment/razorpay/create-order`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appointmentId: apptId,
+            type: "service",
+            amount: service.price || 0,
+          }),
+        });
+
+        const orderJson = await orderRes.json().catch(() => null);
+        toast.dismiss("payment-toast");
+
+        if (!orderRes.ok || !orderJson?.order) {
+          toast.error(orderJson?.message || "Failed to initialize payment");
+          navigate("/appointments");
+          return;
+        }
+
+        await openRazorpayModal({
+          order: orderJson.order,
+          keyId: orderJson.keyId,
+          appointmentId: apptId,
+          type: "service",
+          patient: { name: patientName, mobile },
+          amount: service.price || 0,
+          title: `Diagnostic: ${service.name}`,
+          onSuccess: () => {
+            toast.success("Payment verified! Service Appointment confirmed.", {
+              style: toastStyles?.successToast,
+            });
+            navigate("/appointments");
+          },
+          onError: (err) => {
+            toast.error(err.message || "Payment incomplete. You can pay later from your appointments.");
+            navigate("/appointments");
+          },
+        });
+      } else {
+        toast.success("Service Appointment booked successfully!", {
+          style: toastStyles?.successToast,
+        });
+
+        setTimeout(() => {
+          navigate("/appointments");
+        }, 800);
+      }
     } catch (err) {
       console.error(err);
       toast.error("Network error during booking");
@@ -466,4 +555,25 @@ export default function ServiceDetailPage() {
       </div>
     </div>
   );
+}
+
+function ClerkServiceDetailWrapper() {
+  const { user } = useUser();
+  return <ServiceDetailPageContent currentUser={user} isClerk={true} />;
+}
+
+function LocalServiceDetailWrapper() {
+  let user = null;
+  try {
+    const patUser = localStorage.getItem("patientUser_v1");
+    if (patUser) user = JSON.parse(patUser);
+  } catch (err) {}
+  return <ServiceDetailPageContent currentUser={user} isClerk={false} />;
+}
+
+export default function ServiceDetailPage() {
+  if (isClerkKeyConfigured) {
+    return <ClerkServiceDetailWrapper />;
+  }
+  return <LocalServiceDetailWrapper />;
 }

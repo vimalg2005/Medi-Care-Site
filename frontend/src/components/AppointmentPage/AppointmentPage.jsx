@@ -2,12 +2,20 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { 
   Calendar, Clock, AlertCircle, CheckCircle, XCircle, 
-  CreditCard, Wallet, Bell, CalendarDays, RefreshCw, Trash2 
+  CreditCard, Wallet, Bell, CalendarDays, RefreshCw, Trash2, Search 
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
+import { useUser } from "@clerk/clerk-react";
 import { appointmentPageStyles, cardStyles, badgeStyles, iconSize, toastStyles } from "../../assets/themeStyles.js";
 
 import { API_BASE } from "../../config.js";
+import { openRazorpayModal } from "../../utils/razorpay.js";
+
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const isClerkKeyConfigured = 
+  Boolean(PUBLISHABLE_KEY) && 
+  (PUBLISHABLE_KEY.startsWith("pk_test_") || PUBLISHABLE_KEY.startsWith("pk_live_")) &&
+  PUBLISHABLE_KEY !== "pk_test_your_clerk_publishable_key_here";
 
 function pad(n) {
   return String(n ?? 0).padStart(2, "0");
@@ -125,30 +133,41 @@ const StatusBadge = ({ itemStatus }) => {
   );
 };
 
-export default function AppointmentPage() {
+function AppointmentPageContent({ userId, userEmail, isSignedIn, isLoaded }) {
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [loadingServices, setLoadingServices] = useState(false);
   const [doctorAppts, setDoctorAppts] = useState([]);
   const [serviceAppts, setServiceAppts] = useState([]);
   const [error, setError] = useState(null);
 
-  const getPatientUserId = () => {
-    try {
-      const patientStr = localStorage.getItem("patientUser_v1");
-      if (patientStr) {
-        return JSON.parse(patientStr).id;
-      }
-    } catch (e) {}
-    return "anonymous";
-  };
+  // Search by phone number
+  const [searchMobile, setSearchMobile] = useState("");
+  const [activeLookupMobile, setActiveLookupMobile] = useState("");
+
+  const resolvedCreatedBy = userId || "anonymous";
 
   const loadDoctorAppointments = useCallback(async () => {
+    if (isClerkKeyConfigured && !isLoaded) return;
     setLoadingDoctors(true);
     setError(null);
-    const createdBy = getPatientUserId();
 
     try {
-      const res = await fetch(`${API_BASE}/api/appointments/me?createdBy=${createdBy}`);
+      const params = new URLSearchParams();
+      if (activeLookupMobile) {
+        params.append("mobile", activeLookupMobile);
+      } else {
+        if (resolvedCreatedBy && resolvedCreatedBy !== "anonymous") {
+          params.append("createdBy", resolvedCreatedBy);
+        }
+        if (userEmail) {
+          params.append("email", userEmail);
+        }
+        if (!resolvedCreatedBy || resolvedCreatedBy === "anonymous") {
+          params.append("createdBy", "anonymous");
+        }
+      }
+
+      const res = await fetch(`${API_BASE}/api/appointments/me?${params.toString()}`);
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
@@ -163,15 +182,30 @@ export default function AppointmentPage() {
     } finally {
       setLoadingDoctors(false);
     }
-  }, []);
+  }, [resolvedCreatedBy, userEmail, activeLookupMobile, isLoaded]);
 
   const loadServiceAppointments = useCallback(async () => {
+    if (isClerkKeyConfigured && !isLoaded) return;
     setLoadingServices(true);
     setError(null);
-    const createdBy = getPatientUserId();
 
     try {
-      const res = await fetch(`${API_BASE}/api/service-appointments/me?createdBy=${createdBy}`);
+      const params = new URLSearchParams();
+      if (activeLookupMobile) {
+        params.append("mobile", activeLookupMobile);
+      } else {
+        if (resolvedCreatedBy && resolvedCreatedBy !== "anonymous") {
+          params.append("createdBy", resolvedCreatedBy);
+        }
+        if (userEmail) {
+          params.append("email", userEmail);
+        }
+        if (!resolvedCreatedBy || resolvedCreatedBy === "anonymous") {
+          params.append("createdBy", "anonymous");
+        }
+      }
+
+      const res = await fetch(`${API_BASE}/api/service-appointments/me?${params.toString()}`);
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
@@ -186,12 +220,33 @@ export default function AppointmentPage() {
     } finally {
       setLoadingServices(false);
     }
-  }, []);
+  }, [resolvedCreatedBy, userEmail, activeLookupMobile, isLoaded]);
 
   useEffect(() => {
     loadDoctorAppointments();
     loadServiceAppointments();
   }, [loadDoctorAppointments, loadServiceAppointments]);
+
+  const handleMobileLookup = (e) => {
+    e.preventDefault();
+    const clean = (searchMobile || "").trim();
+    if (!clean || clean.length !== 10) {
+      toast.error("Please enter a valid 10-digit mobile number");
+      return;
+    }
+    setActiveLookupMobile(clean);
+  };
+
+  const clearMobileLookup = () => {
+    setSearchMobile("");
+    setActiveLookupMobile("");
+  };
+
+  const handleRefreshAll = () => {
+    loadDoctorAppointments();
+    loadServiceAppointments();
+    toast.success("Refreshed bookings", { id: "refresh-toast" });
+  };
 
   const handleCancelDoctorAppt = async (apptId) => {
     if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
@@ -224,6 +279,55 @@ export default function AppointmentPage() {
       loadServiceAppointments();
     } catch (err) {
       toast.error(err.message || "Failed to cancel test slot");
+    }
+  };
+
+  const handlePayOnline = async (item, type = "doctor") => {
+    try {
+      const amount = type === "service" ? (item.price || 0) : (item.fees || 500);
+      toast.loading("Opening Razorpay payment gateway...", { id: "pay-toast" });
+
+      const res = await fetch(`${API_BASE}/api/payment/razorpay/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId: item.id,
+          type,
+          amount,
+        }),
+      });
+
+      const json = await res.json().catch(() => null);
+      toast.dismiss("pay-toast");
+
+      if (!res.ok || !json?.order) {
+        toast.error(json?.message || "Failed to initialize payment");
+        return;
+      }
+
+      await openRazorpayModal({
+        order: json.order,
+        keyId: json.keyId,
+        appointmentId: item.id,
+        type,
+        patient: { name: item.patientName },
+        amount,
+        title: type === "service" ? `Diagnostic Test: ${item.name}` : `Consultation: Dr. ${item.doctor}`,
+        onSuccess: () => {
+          toast.success("Payment verified! Appointment confirmed.", {
+            style: toastStyles?.successToast,
+          });
+          loadDoctorAppointments();
+          loadServiceAppointments();
+        },
+        onError: (err) => {
+          toast.error(err.message || "Payment could not be completed");
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      toast.dismiss("pay-toast");
+      toast.error("Payment error");
     }
   };
 
@@ -271,6 +375,8 @@ export default function AppointmentPage() {
         date,
         time,
         payment,
+        paymentStatus: a.payment?.status || "Pending",
+        fees: a.fees || a.fee || 500,
         status,
         rescheduledTo,
       };
@@ -302,33 +408,123 @@ export default function AppointmentPage() {
         date,
         time,
         payment,
+        paymentStatus: s.payment?.status || "Pending",
         status,
         rescheduledTo,
       };
     }).map((x) => ({ ...x, status: computeStatus(x) }));
   }, [serviceAppts]);
 
-  const patientId = getPatientUserId();
-  const showEmptyState = patientId === "anonymous" && doctorAppts.length === 0 && serviceAppts.length === 0;
+  const isGuest = !isSignedIn && (!userId || userId === "anonymous");
+  const hasNoBookings = doctorAppts.length === 0 && serviceAppts.length === 0;
 
   return (
     <div className={appointmentPageStyles.pageContainer}>
       <Toaster position="top-center" reverseOrder={false} />
       <div className={appointmentPageStyles.maxWidthContainer}>
         
-        {showEmptyState && (
-          <div className="bg-white rounded-3xl p-8 border border-emerald-100 text-center mb-8 shadow-sm">
-            <AlertCircle className="w-12 h-12 text-emerald-600 mx-auto mb-3" />
-            <p className="text-emerald-800 font-semibold mb-2">Patient Dashboard (Demo)</p>
-            <p className="text-slate-500 text-sm max-w-sm mx-auto mb-4">
-              To view your custom booked appointments, please register/log in as a Patient using the tab in the top navbar.
+        {/* Page Top Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-emerald-950 font-serif">
+              My Bookings & Consultations
+            </h1>
+            <p className="text-slate-600 text-sm mt-1">
+              View and manage your scheduled doctor appointments and clinical diagnostic tests.
             </p>
-            <Link
-              to="/login"
-              className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
+          </div>
+          <button
+            onClick={handleRefreshAll}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold text-emerald-700 bg-white border border-emerald-200 hover:bg-emerald-50 shadow-xs transition self-start sm:self-auto cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingDoctors || loadingServices ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
+
+        {/* Mobile Lookup Helper Banner */}
+        <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 mb-8 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2 text-emerald-900 text-xs sm:text-sm font-medium">
+            <Search className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Search bookings by phone number:</span>
+          </div>
+          <form onSubmit={handleMobileLookup} className="flex items-center gap-2 w-full sm:w-auto">
+            <input
+              type="tel"
+              maxLength={10}
+              placeholder="10-digit mobile"
+              value={searchMobile}
+              onChange={(e) => setSearchMobile(e.target.value)}
+              className="px-3.5 py-1.5 text-xs sm:text-sm bg-white border border-emerald-300 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-400 text-emerald-900 placeholder-emerald-400 w-full sm:w-44"
+            />
+            <button
+              type="submit"
+              className="px-4 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition shadow-xs shrink-0 cursor-pointer"
             >
-              Sign In Now
-            </Link>
+              Search
+            </button>
+            {activeLookupMobile && (
+              <button
+                type="button"
+                onClick={clearMobileLookup}
+                className="px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0"
+              >
+                Clear
+              </button>
+            )}
+          </form>
+        </div>
+
+        {/* Active Lookup Filter Notice */}
+        {activeLookupMobile && (
+          <div className="mb-6 flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium">
+            <span>Showing bookings matched with phone: <strong>{activeLookupMobile}</strong></span>
+            <button onClick={clearMobileLookup} className="text-blue-700 underline font-bold cursor-pointer">
+              Show All My Bookings
+            </button>
+          </div>
+        )}
+
+        {/* Empty State when no bookings */}
+        {hasNoBookings && !loadingDoctors && !loadingServices && (
+          <div className="bg-white rounded-3xl p-8 border border-emerald-100 text-center mb-8 shadow-xs">
+            {isGuest ? (
+              <>
+                <AlertCircle className="w-12 h-12 text-emerald-600 mx-auto mb-3" />
+                <h3 className="text-xl font-bold text-emerald-950 mb-2">Patient Dashboard</h3>
+                <p className="text-slate-600 text-sm max-w-md mx-auto mb-4">
+                  To view and manage your booked appointments across devices, please sign in or register with your account.
+                </p>
+                <Link
+                  to="/login"
+                  className="inline-block px-6 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition shadow-md mb-6"
+                >
+                  Sign In Now
+                </Link>
+              </>
+            ) : (
+              <>
+                <CalendarDays className="w-12 h-12 text-emerald-600 mx-auto mb-3" />
+                <h3 className="text-xl font-bold text-emerald-950 mb-2">No Active Bookings Found</h3>
+                <p className="text-slate-600 text-sm max-w-md mx-auto mb-6">
+                  You don't have any appointments booked yet. Schedule a consultation with our verified doctors or book a diagnostic laboratory test.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-4">
+                  <Link
+                    to="/doctors"
+                    className="px-6 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md transition"
+                  >
+                    Find Doctors
+                  </Link>
+                  <Link
+                    to="/services"
+                    className="px-6 py-2.5 rounded-full bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-semibold shadow-xs transition"
+                  >
+                    Browse Diagnostic Services
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -374,10 +570,19 @@ export default function AppointmentPage() {
                   </div>
                 )}
 
+                {item.paymentStatus !== "Paid" && item.status !== "Canceled" && (
+                  <button
+                    onClick={() => handlePayOnline(item, "doctor")}
+                    className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition w-full py-2 rounded-xl shadow-xs cursor-pointer"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" /> Pay ₹{item.fees || 500} Online
+                  </button>
+                )}
+
                 {item.status !== "Canceled" && item.status !== "Completed" && (
                   <button
                     onClick={() => handleCancelDoctorAppt(item.id)}
-                    className="mt-4 flex items-center justify-center gap-1 text-xs font-semibold text-rose-500 hover:text-rose-700 transition w-full py-1.5 border border-rose-100 hover:bg-rose-50 rounded-full cursor-pointer"
+                    className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-rose-500 hover:text-rose-700 transition w-full py-1.5 border border-rose-100 hover:bg-rose-50 rounded-full cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Cancel Appointment
                   </button>
@@ -431,10 +636,19 @@ export default function AppointmentPage() {
                   </div>
                 )}
 
+                {srv.paymentStatus !== "Paid" && srv.status !== "Canceled" && (
+                  <button
+                    onClick={() => handlePayOnline(srv, "service")}
+                    className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition w-full py-2 rounded-xl shadow-xs cursor-pointer"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" /> Pay ₹{srv.price} Online
+                  </button>
+                )}
+
                 {srv.status !== "Canceled" && srv.status !== "Completed" && (
                   <button
                     onClick={() => handleCancelServiceAppt(srv.id)}
-                    className="mt-4 flex items-center justify-center gap-1 text-xs font-semibold text-rose-500 hover:text-rose-700 transition w-full py-1.5 border border-rose-100 hover:bg-rose-50 rounded-full cursor-pointer"
+                    className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-rose-500 hover:text-rose-700 transition w-full py-1.5 border border-rose-100 hover:bg-rose-50 rounded-full cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Cancel Test Slot
                   </button>
@@ -449,4 +663,46 @@ export default function AppointmentPage() {
       </div>
     </div>
   );
+}
+
+function ClerkAppointmentWrapper() {
+  const { user, isLoaded, isSignedIn } = useUser();
+  return (
+    <AppointmentPageContent
+      userId={user?.id}
+      userEmail={user?.primaryEmailAddress?.emailAddress}
+      isSignedIn={isSignedIn}
+      isLoaded={isLoaded}
+    />
+  );
+}
+
+function LocalAppointmentWrapper() {
+  let userId = "anonymous";
+  let userEmail = "";
+  let isSignedIn = false;
+  try {
+    const patientStr = localStorage.getItem("patientUser_v1");
+    if (patientStr) {
+      const p = JSON.parse(patientStr);
+      userId = p.id || p._id || "anonymous";
+      userEmail = p.email || "";
+      isSignedIn = Boolean(p.id || p._id);
+    }
+  } catch (e) {}
+  return (
+    <AppointmentPageContent
+      userId={userId}
+      userEmail={userEmail}
+      isSignedIn={isSignedIn}
+      isLoaded={true}
+    />
+  );
+}
+
+export default function AppointmentPage() {
+  if (isClerkKeyConfigured) {
+    return <ClerkAppointmentWrapper />;
+  }
+  return <LocalAppointmentWrapper />;
 }

@@ -1,12 +1,53 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { 
-  Phone, Mail, MapPin, Activity, Send, Heart, 
+  Phone, Mail, MapPin, Activity, Send, Heart, Loader2,
   Facebook, Twitter, Instagram, Linkedin, Youtube 
 } from "lucide-react";
+import toast from "react-hot-toast";
+import { API_BASE } from "../../config.js";
 import { footerStyles } from "../../assets/themeStyles.js";
 
 export default function Footer() {
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubscribe = async (e) => {
+    if (e) e.preventDefault();
+    const trimmed = (email || "").trim();
+
+    if (!trimmed) {
+      toast.error("Please enter your email address");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/newsletter/subscribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(data.message || "Thank you for subscribing to MediCare Health Tips!");
+        setEmail("");
+      } else {
+        toast.error(data.message || "Subscription failed. Please try again.");
+      }
+    } catch (err) {
+      console.error("Newsletter subscription error:", err);
+      toast.error("Network error subscribing to newsletter");
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const quickLinks = [
     { name: "Home", href: "/" },
     { name: "Doctors", href: "/doctors" },
@@ -27,31 +68,31 @@ export default function Footer() {
       Icon: Facebook,
       color: footerStyles.facebookColor,
       name: "Facebook",
-      href: "https://www.facebook.com/people/Hexagon-Digital-Services/61567156598660/",
+      href: "https://www.facebook.com/profile.php?id=61566434211126",
     },
     {
       Icon: Twitter,
       color: footerStyles.twitterColor,
       name: "Twitter",
-      href: "https://www.linkedin.com/company/hexagondigtial-services/",
+      href: "https://x.com/VimalGupta9391",
     },
     {
       Icon: Instagram,
       color: footerStyles.instagramColor,
       name: "Instagram",
-      href: "http://instagram.com/hexagondigitalservices?igsh=MWp2NG1oNTlibWVnZA%3D%3D",
+      href: "https://www.instagram.com/vi.m.a.l_/",
     },
     {
       Icon: Linkedin,
       color: footerStyles.linkedinColor,
       name: "LinkedIn",
-      href: "https://www.linkedin.com/company/hexagondigtial-services/",
+      href: "https://www.linkedin.com/in/vimal-gupta-9a720a289/",
     },
     {
       Icon: Youtube,
       color: footerStyles.youtubeColor,
       name: "YouTube",
-      href: "https://youtube.com/@hexagondigitalservices?si=lxEFYNCP42t6AoDJ",
+      href: "https://www.youtube.com/@vimalgupta3013",
     },
   ];
 
@@ -88,7 +129,9 @@ export default function Footer() {
                   <div className={footerStyles.contactIconWrapper}>
                     <Phone className={footerStyles.contactIcon} />
                   </div>
-                  <span className={footerStyles.contactText}>+91 8299431275</span>
+                  <a href="https://wa.me/919660802511" target="_blank" rel="noopener noreferrer" className={footerStyles.contactText + " hover:text-white"}>
+                    +91 9660802511
+                  </a>
                 </div>
                 <div className={footerStyles.contactItem}>
                   <div className={footerStyles.contactIconWrapper}>
@@ -146,30 +189,54 @@ export default function Footer() {
 
               <div className={footerStyles.newsletterForm}>
                 {/* Mobile Newsletter UI */}
-                <div className={footerStyles.mobileNewsletterContainer}>
+                <form onSubmit={handleSubscribe} className={footerStyles.mobileNewsletterContainer}>
                   <input
                     type="email"
                     placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={submitting}
                     className={footerStyles.emailInput}
                   />
-                  <button className={footerStyles.mobileSubscribeButton}>
-                    <Send className={footerStyles.mobileButtonIcon} />
-                    Subscribe
+                  <button 
+                    type="submit" 
+                    disabled={submitting}
+                    className={`${footerStyles.mobileSubscribeButton} ${submitting ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                  >
+                    {submitting ? (
+                      <Loader2 className={`${footerStyles.mobileButtonIcon} animate-spin`} />
+                    ) : (
+                      <Send className={footerStyles.mobileButtonIcon} />
+                    )}
+                    {submitting ? "Subscribing..." : "Subscribe"}
                   </button>
-                </div>
+                </form>
 
                 {/* Desktop Newsletter UI */}
-                <div className={footerStyles.desktopNewsletterContainer}>
+                <form onSubmit={handleSubscribe} className={footerStyles.desktopNewsletterContainer}>
                   <input
                     type="email"
                     placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={submitting}
                     className={footerStyles.desktopEmailInput}
                   />
-                  <button className={footerStyles.desktopSubscribeButton}>
-                    <Send className={footerStyles.desktopButtonIcon} />
-                    <span className={footerStyles.desktopButtonText}>Subscribe</span>
+                  <button 
+                    type="submit" 
+                    disabled={submitting}
+                    className={`${footerStyles.desktopSubscribeButton} ${submitting ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                  >
+                    {submitting ? (
+                      <Loader2 className={`${footerStyles.desktopButtonIcon} animate-spin mr-2`} />
+                    ) : (
+                      <Send className={footerStyles.desktopButtonIcon} />
+                    )}
+                    <span className={footerStyles.desktopButtonText}>
+                      {submitting ? "Subscribing..." : "Subscribe"}
+                    </span>
                   </button>
-                </div>
+                </form>
 
                 {/* Social Media Link Icons */}
                 <div className={footerStyles.socialContainer}>
