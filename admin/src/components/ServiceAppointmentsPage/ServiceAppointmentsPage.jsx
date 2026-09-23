@@ -22,28 +22,6 @@ function formatDateNice(dateStr) {
   });
 }
 
-function parseTimeToParts(timeStr) {
-  if (!timeStr) return { hour: 12, minute: 0, ampm: "AM" };
-  const m = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-  if (m) {
-    let hh = Number(m[1]);
-    const mm = Number(m[2]);
-    const ampm = m[3] ? m[3].toUpperCase() : null;
-    if (!ampm) {
-      const hour12 = hh % 12 === 0 ? 12 : hh % 12;
-      return { hour: hour12, minute: mm, ampm: hh >= 12 ? "PM" : "AM" };
-    }
-    return { hour: hh, minute: mm, ampm };
-  }
-  return { hour: 12, minute: 0, ampm: "AM" };
-}
-
-function timePartsTo12HourString(hh24, mm) {
-  let ampm = hh24 >= 12 ? "PM" : "AM";
-  let hour = hh24 % 12 === 0 ? 12 : hh24 % 12;
-  return `${formatTwo(hour)}:${formatTwo(mm)} ${ampm}`;
-}
-
 function timePartsToInputValue(appt) {
   const hour = Number(appt.hour || 0);
   const minute = Number(appt.minute || 0);
@@ -55,7 +33,8 @@ function timePartsToInputValue(appt) {
 }
 
 function formatTimeDisplay(appt) {
-  return `${formatTwo(appt.hour)}:${formatTwo(appt.minute)} ${appt.ampm}`;
+  if (!appt) return "";
+  return `${formatTwo(appt.hour || 0)}:${formatTwo(appt.minute || 0)} ${appt.ampm || ""}`;
 }
 
 function StatusBadge({ status }) {
@@ -129,13 +108,7 @@ function RescheduleButton({ appointment, onReschedule, disabled }) {
       baseDate && !isDateBefore(baseDate, todayISO) ? baseDate : todayISO;
     setDate(initialDate);
     setTime(timePartsToInputValue(appointment));
-  }, [
-    appointment.date,
-    appointment.hour,
-    appointment.minute,
-    appointment.ampm,
-    todayISO
-  ]);
+  }, [appointment, todayISO]);
 
   function save() {
     if (!date || !time) return;

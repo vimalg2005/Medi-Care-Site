@@ -138,58 +138,65 @@ export default function Navbar() {
       <style>{navbarStyles.animationStyles}</style>
       <nav
         ref={navRef}
-        className={`${navbarStyles.navbarContainer} ${
-          showNavbar ? navbarStyles.navbarVisible : navbarStyles.navbarHidden
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 backdrop-blur-xl bg-white/85 border-b border-emerald-100/60 shadow-xs ${
+          showNavbar ? "translate-y-0" : "-translate-y-full"
         }`}
       >
-        <div className={navbarStyles.contentWrapper}>
-          <div className={navbarStyles.flexContainer}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-20">
             {/* Logo Section */}
-            <Link to="/" className={navbarStyles.logoLink}>
-              <div className="flex items-center gap-2">
-                <Heart className="w-8 h-8 text-emerald-600 fill-emerald-100" />
-                <div className={navbarStyles.logoTextContainer}>
-                  <span className={navbarStyles.logoTitle}>MediCare</span>
-                  <p className={navbarStyles.logoSubtitle}>Health & Wellness</p>
-                </div>
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <div className="p-2 rounded-2xl bg-linear-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                <Heart className="w-5 h-5 fill-white" />
+              </div>
+              <div>
+                <span className="text-xl sm:text-2xl font-black bg-linear-to-r from-emerald-700 via-teal-700 to-emerald-800 bg-clip-text text-transparent tracking-tight">
+                  MediCare
+                </span>
+                <p className="text-[10px] font-semibold text-emerald-600 tracking-wider uppercase -mt-0.5">
+                  Healthcare & Diagnostics
+                </p>
               </div>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <div className={navbarStyles.desktopNav}>
-              <div className={navbarStyles.navItemsContainer}>
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    className={`${navbarStyles.navItem} ${
-                      isActive(item.href)
-                        ? navbarStyles.navItemActive
-                        : navbarStyles.navItemInactive
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+            <div className="hidden md:flex items-center">
+              <div className="flex items-center gap-1 bg-slate-100/70 p-1.5 rounded-full border border-slate-200/50 backdrop-blur-md">
+                {navItems.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      to={item.href}
+                      className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200 ${
+                        active
+                          ? "bg-emerald-600 text-white shadow-sm shadow-emerald-700/25"
+                          : "text-slate-600 hover:text-emerald-800 hover:bg-white/80"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
 
             {/* Right Buttons Section */}
-            <div className={navbarStyles.rightContainer}>
+            <div className="flex items-center gap-2.5 sm:gap-3">
               {/* Doctor Dashboard Link */}
               {isDoctorLoggedIn ? (
                 <>
                   <Link
                     to="/doctor-admin/dashboard"
-                    className="hidden lg:inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-md hover:shadow-lg"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition shadow-md shadow-emerald-700/20"
                   >
-                    <LayoutDashboard className="w-4 h-4" /> Doctor Dashboard
+                    <LayoutDashboard className="w-3.5 h-3.5" /> Doctor Portal
                   </Link>
                   <button
                     onClick={handleDoctorLogout}
-                    className="hidden lg:inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold text-emerald-600 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all cursor-pointer"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition cursor-pointer"
                   >
-                    <LogOut className="w-4 h-4" /> Logout
+                    <LogOut className="w-3.5 h-3.5" /> Logout
                   </button>
                 </>
               ) : isClerkKeyConfigured ? (
@@ -197,29 +204,37 @@ export default function Navbar() {
               ) : isPatientLoggedIn ? (
                 <button
                   onClick={handlePatientLogout}
-                  className="hidden lg:inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold text-rose-600 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition-all cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold text-rose-600 border border-rose-200 bg-rose-50 hover:bg-rose-100 transition cursor-pointer"
                 >
-                  <LogOut className="w-4 h-4" /> Logout (Patient)
+                  <LogOut className="w-3.5 h-3.5" /> Logout
                 </button>
               ) : (
-                <Link
-                  to="/login"
-                  className={navbarStyles.loginButton}
-                >
-                  <LogIn className={navbarStyles.loginIcon} /> Sign In
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/doctors"
+                    className="hidden lg:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 transition"
+                  >
+                    <Calendar className="w-3.5 h-3.5" /> Book Doctor
+                  </Link>
+                  <Link
+                    to="/login"
+                    className="flex items-center gap-1.5 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-4 sm:px-5 py-2 rounded-full font-bold text-xs sm:text-sm shadow-md shadow-emerald-800/15 hover:shadow-lg transition cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5" /> Sign In
+                  </Link>
+                </div>
               )}
 
               {/* Mobile Menu Toggle Button */}
               <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={navbarStyles.mobileToggle}
+                className="md:hidden p-2 rounded-xl text-slate-700 hover:bg-emerald-50 border border-slate-200/60 transition cursor-pointer"
                 aria-label="Toggle Menu"
               >
                 {isOpen ? (
-                  <X className={navbarStyles.toggleIcon} />
+                  <X className="w-5 h-5 text-emerald-700" />
                 ) : (
-                  <Menu className={navbarStyles.toggleIcon} />
+                  <Menu className="w-5 h-5 text-emerald-700" />
                 )}
               </button>
             </div>

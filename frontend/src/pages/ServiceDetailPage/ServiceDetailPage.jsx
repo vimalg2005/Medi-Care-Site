@@ -17,7 +17,7 @@ const isClerkKeyConfigured =
   (PUBLISHABLE_KEY.startsWith("pk_test_") || PUBLISHABLE_KEY.startsWith("pk_live_")) &&
   PUBLISHABLE_KEY !== "pk_test_your_clerk_publishable_key_here";
 
-function ServiceDetailPageContent({ currentUser, isClerk }) {
+function ServiceDetailPageContent({ currentUser }) {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -36,7 +36,6 @@ function ServiceDetailPageContent({ currentUser, isClerk }) {
   const [paymentMethod, setPaymentMethod] = useState("Online");
   const [bookingBusy, setBookingBusy] = useState(false);
 
-  // Load patient details from Clerk or localStorage
   useEffect(() => {
     if (currentUser) {
       const name = currentUser.fullName || currentUser.name || "";
@@ -44,7 +43,7 @@ function ServiceDetailPageContent({ currentUser, isClerk }) {
       if (name && !patientName) setPatientName(name);
       if (em && !email) setEmail(em);
     }
-  }, [currentUser]);
+  }, [currentUser, patientName, email]);
 
   // Fetch Service Details
   useEffect(() => {
@@ -559,7 +558,7 @@ function ServiceDetailPageContent({ currentUser, isClerk }) {
 
 function ClerkServiceDetailWrapper() {
   const { user } = useUser();
-  return <ServiceDetailPageContent currentUser={user} isClerk={true} />;
+  return <ServiceDetailPageContent currentUser={user} />;
 }
 
 function LocalServiceDetailWrapper() {
@@ -567,8 +566,10 @@ function LocalServiceDetailWrapper() {
   try {
     const patUser = localStorage.getItem("patientUser_v1");
     if (patUser) user = JSON.parse(patUser);
-  } catch (err) {}
-  return <ServiceDetailPageContent currentUser={user} isClerk={false} />;
+  } catch {
+    user = null;
+  }
+  return <ServiceDetailPageContent currentUser={user} />;
 }
 
 export default function ServiceDetailPage() {

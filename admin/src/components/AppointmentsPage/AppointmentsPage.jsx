@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   Calendar, BadgeIndianRupee, Search, X, Filter, AlertCircle,
   Phone, Mail, User, CreditCard, Wallet, Stethoscope 
@@ -15,7 +16,7 @@ function formatDateISO(iso) {
       month: "short",
       year: "numeric",
     });
-  } catch (e) {
+  } catch {
     return iso;
   }
 }
@@ -31,13 +32,12 @@ function dateTimeFromSlot(slot) {
     if (ampm === "AM" && hh === 12) hh = 0;
     base.setHours(hh, mm, 0, 0);
     return base;
-  } catch (e) {
+  } catch {
     return new Date(slot.date + "T00:00:00");
   }
 }
 
 export default function AppointmentsPage() {
-  const isAdmin = true;
 
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);

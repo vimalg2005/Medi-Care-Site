@@ -425,15 +425,15 @@ export const footerStyles = {
   // Mobile newsletter
   mobileNewsletterContainer: "flex flex-col gap-3 lg:hidden",
   emailInput: "w-full px-4 py-3 text-base text-emerald-800 bg-white border-2 border-emerald-200 rounded-full focus:outline-none focus:ring-4 focus:ring-emerald-300 focus:border-emerald-400 transition-all duration-300 shadow-sm placeholder-emerald-400",
-  mobileSubscribeButton: "w-full inline-flex items-center justify-center gap-2 py-3 rounded-full bg-linear-to-r from-emerald-500 to-green-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300",
+  mobileSubscribeButton: "w-full inline-flex items-center justify-center gap-2 py-3 rounded-full bg-linear-to-r from-emerald-500 to-green-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer active:scale-[0.98]",
   mobileButtonIcon: "w-4 h-4",
   
   // Desktop newsletter
   desktopNewsletterContainer: "relative hidden lg:block",
-  desktopEmailInput: "w-full px-6 py-4 text-base text-emerald-800 bg-white border-2 border-emerald-200 rounded-full focus:outline-none focus:ring-4 focus:ring-emerald-300 focus:border-emerald-400 transition-all duration-300 transform shadow-lg placeholder-emerald-400",
-  desktopSubscribeButton: "absolute right-2 xl:px-2 top-2 bg-linear-to-r from-emerald-500 to-green-600 text-white px-4 py-2 rounded-full cursor-pointer transition-all duration-300 transform flex items-center shadow-lg hover:shadow-xl",
-  desktopButtonIcon: "w-4 h-4 mr-2",
-  desktopButtonText: "font-semibold",
+  desktopEmailInput: "w-full pl-4 pr-30 py-2.5 text-xs sm:text-sm text-emerald-800 bg-white border-2 border-emerald-200 rounded-full focus:outline-none focus:ring-4 focus:ring-emerald-300 focus:border-emerald-400 transition-all duration-300 shadow-sm placeholder-emerald-400",
+  desktopSubscribeButton: "absolute right-1 top-1/2 -translate-y-1/2 bg-linear-to-r from-emerald-500 to-green-600 text-white px-3 py-1.5 rounded-full cursor-pointer transition-all duration-300 transform flex items-center shadow-md hover:shadow-lg hover:brightness-105 active:scale-95 z-10",
+  desktopButtonIcon: "w-3.5 h-3.5 mr-1 shrink-0",
+  desktopButtonText: "font-semibold text-xs",
   
   // Social links
   socialContainer: "flex gap-3 justify-center lg:justify-start mt-6",

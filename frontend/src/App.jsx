@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
 import { 
   Heart, Star, Shield, Award, Stethoscope, PhoneCall, 
   ArrowUp, Activity, CheckCircle, Clock 
@@ -214,7 +214,9 @@ const DoctorDashboardWrapper = () => {
       const user = JSON.parse(userStr);
       doctorId = user._id || user.id;
     }
-  } catch (err) {}
+  } catch {
+    doctorId = "dashboard";
+  }
 
   return <Navigate to={`/doctor-admin/${doctorId}`} replace />;
 };

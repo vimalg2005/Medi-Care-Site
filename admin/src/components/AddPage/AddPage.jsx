@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { 
   Calendar, CheckCircle, XCircle, User, Award, 
   MapPin, Plus, Trash2, Shield, Eye, EyeOff, FileText, Activity 
@@ -84,7 +84,9 @@ export default function AddPage() {
     if (form.imagePreview && form.imageFile) {
       try {
         URL.revokeObjectURL(form.imagePreview);
-      } catch (err) {}
+      } catch {
+        // ignore revoke error
+      }
     }
     setForm((p) => ({
       ...p,
@@ -97,13 +99,17 @@ export default function AddPage() {
     if (form.imagePreview && form.imageFile) {
       try {
         URL.revokeObjectURL(form.imagePreview);
-      } catch (err) {}
+      } catch {
+        // ignore revoke error
+      }
     }
     setForm((p) => ({ ...p, imageFile: null, imagePreview: "" }));
     if (fileInputRef.current) {
       try {
         fileInputRef.current.value = "";
-      } catch (err) {}
+      } catch {
+        // ignore reset error
+      }
     }
   }
 
@@ -231,7 +237,9 @@ export default function AddPage() {
       if (form.imagePreview && form.imageFile) {
         try {
           URL.revokeObjectURL(form.imagePreview);
-        } catch (err) {}
+        } catch {
+          // ignore revoke error
+        }
       }
 
       // Reset form
@@ -257,7 +265,9 @@ export default function AddPage() {
       if (fileInputRef.current) {
         try {
           fileInputRef.current.value = "";
-        } catch (err) {}
+        } catch {
+          // ignore reset error
+        }
       }
 
       setSlotDate("");

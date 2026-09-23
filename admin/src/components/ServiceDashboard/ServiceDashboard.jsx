@@ -12,10 +12,6 @@ const formatCurrency = (v) => {
   return `₹ ${Number(v || 0).toLocaleString()}`;
 };
 
-const safeNumber = (v, fallback = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
 
 function normalizeService(doc) {
   if (!doc) return null;

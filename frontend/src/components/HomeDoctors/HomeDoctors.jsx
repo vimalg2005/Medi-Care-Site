@@ -120,7 +120,7 @@ export default function HomeDoctors() {
                       }
                     );
                     setDoctors(normalized);
-                  } catch (e) {
+                  } catch {
                     setError("Failed to reload data");
                   } finally {
                     setLoading(false);
@@ -144,6 +144,25 @@ export default function HomeDoctors() {
                   <div className={homeDoctorsStyles.skeletonButton}></div>
                 </div>
               ))}
+            </div>
+          ) : doctors.length === 0 && !error ? (
+            /* No verified doctors registered yet */
+            <div className="text-center py-16 bg-white/60 rounded-3xl border border-dashed border-emerald-200 max-w-lg mx-auto mt-4">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-100">
+                <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <p className="text-base font-bold text-slate-700 mb-1">No doctors registered yet</p>
+              <p className="text-sm text-slate-500 max-w-xs mx-auto mb-5">
+                Doctors appear here once they create and verify their account via the doctor portal.
+              </p>
+              <a
+                href="/login"
+                className="inline-flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full transition"
+              >
+                Register as a Doctor
+              </a>
             </div>
           ) : (
             /* Doctors Grid */
@@ -211,3 +230,4 @@ export default function HomeDoctors() {
     </>
   );
 }
+

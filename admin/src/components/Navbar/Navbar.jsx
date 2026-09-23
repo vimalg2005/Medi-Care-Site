@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
   Home, UserPlus, Users, Calendar, Grid, 
-  PlusSquare, List, Menu, X, LogOut, Heart 
+  PlusSquare, List, Menu, X, LogOut, Heart, ShieldCheck 
 } from "lucide-react";
+import toast from "react-hot-toast";
+import { useAdminAuth } from "../../context/AdminAuthContext.jsx";
 import { navbarStyles } from "../../assets/themeStyles.js";
 
 const ns = navbarStyles;
@@ -45,6 +47,7 @@ const MobileItem = ({ to, label, icon, onClick }) => {
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const { adminUser, logout } = useAdminAuth();
   const navInnerRef = useRef(null);
   const indicatorRef = useRef(null);
   const location = useLocation();
@@ -115,8 +118,9 @@ export default function Navbar() {
   }, [open]);
 
   const handleSignOut = () => {
-    // For demo console, just redirect to client homepage
-    navigate("/");
+    logout();
+    toast.success("Administrator session closed.");
+    navigate("/login");
   };
 
   return (
@@ -161,6 +165,13 @@ export default function Navbar() {
 
           {/* Right actions */}
           <div className={ns.rightContainer}>
+            {adminUser && (
+              <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate max-w-[140px]">{adminUser.email}</span>
+              </div>
+            )}
+
             <button
               onClick={handleSignOut}
               className={ns.signOutButton}

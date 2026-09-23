@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   Edit2,
   Save,
@@ -20,9 +20,10 @@ import {
   AlertCircle,
   BadgeIndianRupee,
 } from "lucide-react";
-import { editProfilePageStyles, iconSize } from "../../assets/themeStyles";
+import { editProfilePageStyles } from "../../assets/themeStyles";
 import { API_BASE as BASE_URL } from "../../config.js";
 
+const API_BASE = `${BASE_URL}/api/doctors`;
 const STORAGE_KEY = "doctorToken_v1";
 
 function parse12HourTimeToMinutes(t) {
@@ -43,10 +44,12 @@ function formatTimeFromInput(time24) {
   return `${String(hr).padStart(2, "0")}:${m} ${ampm}`;
 }
 
-function dedupeAndSortSchedule(schedule = {}) {
+function dedupeAndSortSchedule(schedule) {
   const out = {};
-  Object.entries(schedule || {}).forEach(([date, slots]) => {
-    const uniq = Array.from(new Set(slots || []));
+  if (!schedule || typeof schedule !== "object") return out;
+  Object.entries(schedule).forEach(([date, slots]) => {
+    if (!Array.isArray(slots)) return;
+    const uniq = Array.from(new Set(slots));
     uniq.sort(
       (a, b) => parse12HourTimeToMinutes(a) - parse12HourTimeToMinutes(b),
     );
@@ -55,10 +58,8 @@ function dedupeAndSortSchedule(schedule = {}) {
   return out;
 }
 
-export default function EditProfilePage({ apiBase }) {
+export default function EditProfilePage() {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const API_BASE = `${BASE_URL}/api/doctors`;
 
   const [doc, setDoc] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -97,10 +98,16 @@ export default function EditProfilePage({ apiBase }) {
     if (id) fetchDoctor();
     return () => {
       cancelled = true;
-      if (imagePreview && imagePreview.startsWith("blob:"))
-        URL.revokeObjectURL(imagePreview);
     };
   }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview && imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
 
   const addToast = (text, type = "success") => {
     const idt = Date.now() + Math.random();

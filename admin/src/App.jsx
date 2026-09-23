@@ -2,10 +2,15 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
+// Authentication Context & Route Guard
+import { AdminAuthProvider } from "./context/AdminAuthContext.jsx";
+import ProtectedRoute from "./components/ProtectedRoute/ProtectedRoute.jsx";
+
 // Import Layout Component
 import Navbar from "./components/Navbar/Navbar.jsx";
 
 // Import Admin components/pages
+import LoginPage from "./components/LoginPage/LoginPage.jsx";
 import DashboardPage from "./components/DashboardPage/DashboardPage.jsx";
 import AddPage from "./components/AddPage/AddPage.jsx";
 import ListPage from "./components/ListPage/ListPage.jsx";
@@ -31,25 +36,100 @@ const Layout = ({ children }) => {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Toaster position="top-center" reverseOrder={false} />
-      <Routes>
-        {/* Redirect Root path to /h (Dashboard) */}
-        <Route path="/" element={<Navigate to="/h" replace />} />
-        
-        {/* Admin Router Paths */}
-        <Route path="/h" element={<Layout><DashboardPage /></Layout>} />
-        <Route path="/add" element={<Layout><AddPage /></Layout>} />
-        <Route path="/list" element={<Layout><ListPage /></Layout>} />
-        <Route path="/appointments" element={<Layout><AppointmentsPage /></Layout>} />
-        <Route path="/service-dashboard" element={<Layout><ServiceDashboard /></Layout>} />
-        <Route path="/add-service" element={<Layout><AddService /></Layout>} />
-        <Route path="/list-service" element={<Layout><ListServicePage /></Layout>} />
-        <Route path="/service-appointments" element={<Layout><ServiceAppointmentsPage /></Layout>} />
-        
-        {/* Catch-all route to dashboard */}
-        <Route path="*" element={<Navigate to="/h" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <AdminAuthProvider>
+      <BrowserRouter>
+        <Toaster position="top-center" reverseOrder={false} />
+        <Routes>
+          {/* Public Authentication Gate */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* Root Path Redirects to Dashboard (Protected) */}
+          <Route 
+            path="/" 
+            element={
+              <ProtectedRoute>
+                <Navigate to="/h" replace />
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Strictly Protected Admin Routes */}
+          <Route 
+            path="/h" 
+            element={
+              <ProtectedRoute>
+                <Layout><DashboardPage /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/add" 
+            element={
+              <ProtectedRoute>
+                <Layout><AddPage /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/list" 
+            element={
+              <ProtectedRoute>
+                <Layout><ListPage /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/appointments" 
+            element={
+              <ProtectedRoute>
+                <Layout><AppointmentsPage /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/service-dashboard" 
+            element={
+              <ProtectedRoute>
+                <Layout><ServiceDashboard /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/add-service" 
+            element={
+              <ProtectedRoute>
+                <Layout><AddService /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/list-service" 
+            element={
+              <ProtectedRoute>
+                <Layout><ListServicePage /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/service-appointments" 
+            element={
+              <ProtectedRoute>
+                <Layout><ServiceAppointmentsPage /></Layout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Catch-all route to dashboard (guarded) */}
+          <Route 
+            path="*" 
+            element={
+              <ProtectedRoute>
+                <Navigate to="/h" replace />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </BrowserRouter>
+    </AdminAuthProvider>
   );
 }

@@ -23,7 +23,14 @@ const doctorSchema = new mongoose.Schema(
     patients: { type: String, default: "" },
     rating: { type: Number, default: 0 },
     clerkId: { type: String, default: null, index: true },
-    isVerified: { type: Boolean, default: true },
+    isVerified: { type: Boolean, default: false },
+    emailVerified: { type: Boolean, default: false },
+    isRegisteredAccount: { type: Boolean, default: false },
+    approvalStatus: {
+      type: String,
+      enum: ["Approved", "Pending", "Rejected"],
+      default: "Pending",
+    },
   },
   { timestamps: true }
 );

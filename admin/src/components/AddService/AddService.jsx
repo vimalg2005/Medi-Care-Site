@@ -72,7 +72,7 @@ export default function AddService() {
     if (Number(slotDay) > daysInSelectedMonth) {
       setSlotDay(String(daysInSelectedMonth));
     }
-  }, [slotMonth, slotYear, daysInSelectedMonth]);
+  }, [slotMonth, slotYear, daysInSelectedMonth, slotDay]);
 
   useEffect(() => {
     let mounted = true;
@@ -123,7 +123,9 @@ export default function AddService() {
     if (imagePreview && imagePreview.startsWith("blob:")) {
       try {
         URL.revokeObjectURL(imagePreview);
-      } catch (err) {}
+      } catch {
+        // ignore revoke error
+      }
     }
     setImageFile(f);
     setImagePreview(URL.createObjectURL(f));
@@ -145,7 +147,9 @@ export default function AddService() {
     if (imagePreview && imagePreview.startsWith("blob:")) {
       try {
         URL.revokeObjectURL(imagePreview);
-      } catch (err) {}
+      } catch {
+        // ignore revoke error
+      }
     }
     setImagePreview(null);
     setImageFile(null);
@@ -341,7 +345,7 @@ export default function AddService() {
                     type="button"
                     onClick={() => {
                       if (imagePreview && imagePreview.startsWith("blob:")) {
-                        try { URL.revokeObjectURL(imagePreview); } catch (e) {}
+                        try { URL.revokeObjectURL(imagePreview); } catch { /* ignore */ }
                       }
                       setImagePreview(null);
                       setImageFile(null);

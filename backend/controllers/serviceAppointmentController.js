@@ -131,7 +131,7 @@ export const updateServiceAppointment = async (req, res) => {
         // Increment completed in Service model
         await Service.findByIdAndUpdate(appt.serviceId, { $inc: { completed: 1 } });
       } else if (body.status === "Canceled") {
-        update["payment.status"] = appt.payment.status === "Paid" ? "Refunded" : "Failed";
+        update["payment.status"] = appt.payment?.status === "Paid" ? "Refunded" : "Failed";
         // Increment canceled in Service model
         await Service.findByIdAndUpdate(appt.serviceId, { $inc: { canceled: 1 } });
       }
@@ -172,7 +172,7 @@ export const cancelServiceAppointment = async (req, res) => {
       id,
       {
         status: "Canceled",
-        "payment.status": appt.payment.status === "Paid" ? "Refunded" : "Failed"
+        "payment.status": appt.payment?.status === "Paid" ? "Refunded" : "Failed"
       },
       { new: true }
     );

@@ -17,7 +17,7 @@ const isClerkKeyConfigured =
   (PUBLISHABLE_KEY.startsWith("pk_test_") || PUBLISHABLE_KEY.startsWith("pk_live_")) &&
   PUBLISHABLE_KEY !== "pk_test_your_clerk_publishable_key_here";
 
-function LoginPageContent({ clerkUser, isClerkSignedIn, isClerkLoaded, clerkSignOut }) {
+function LoginPageContent({ clerkUser, isClerkSignedIn, clerkSignOut }) {
   const [activeTab, setActiveTab] = useState("doctor"); // "doctor" or "patient"
   
   // Doctor form state
@@ -36,10 +36,10 @@ function LoginPageContent({ clerkUser, isClerkSignedIn, isClerkLoaded, clerkSign
 
   // Register form state
   const [regSpecialization, setRegSpecialization] = useState("General Physician");
-  const [regExperience, setRegExperience] = useState("5 years");
+  const [regExperience] = useState("5 years");
   const [regQualifications, setRegQualifications] = useState("MBBS, MD");
   const [regFee, setRegFee] = useState(500);
-  const [regLocation, setRegLocation] = useState("Main Clinic");
+  const [regLocation] = useState("Main Clinic");
 
   // Patient form state
   const [patientName, setPatientName] = useState("");

@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Link, useLocation, useParams, useNavigate } from "react-router-dom";
 import { Home, Calendar, Edit, LogOut, Menu, X, Heart, ShieldCheck } from "lucide-react";
 import { UserButton, useUser, useClerk } from "@clerk/clerk-react";
-import { navbarStylesDr } from "../../assets/themeStyles.js";
 
 const STORAGE_KEY = "doctorToken_v1";
 

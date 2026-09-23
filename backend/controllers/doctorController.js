@@ -3,11 +3,13 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 const parseTimeToMinutes = (t = "") => {
-  const [time = "0:00", ampm = ""] = (t || "").split(" ");
-  const [hh = 0, mm = 0] = time.split(":").map(Number);
+  const [time = "0:00", ampm = ""] = String(t || "").trim().split(" ");
+  const parts = (time || "").split(":");
+  const hh = parseInt(parts[0], 10) || 0;
+  const mm = parseInt(parts[1], 10) || 0;
   let h = hh % 12;
   if ((ampm || "").toUpperCase() === "PM") h += 12;
-  return h * 60 + (mm || 0);
+  return h * 60 + mm;
 };
 
 function dedupeAndSortSchedule(schedule = {}) {
@@ -47,6 +49,10 @@ function normalizeDocForClient(raw = {}) {
   }
 
   doc.availability = doc.availability === undefined ? "Available" : doc.availability;
+  doc.approvalStatus = doc.approvalStatus || "Approved";
+  doc.isVerified = Boolean(doc.isVerified);
+  doc.emailVerified = Boolean(doc.emailVerified || (doc.clerkId && doc.isVerified));
+  doc.isRegisteredAccount = Boolean(doc.isRegisteredAccount || doc.clerkId);
   doc.patients = doc.patients ?? "";
   doc.rating = doc.rating ?? 0;
   doc.fee = doc.fee ?? doc.fees ?? 0;
@@ -133,7 +139,7 @@ export const createDoctor = async (req, res) => {
 // List doctors
 export const getDoctors = async (req, res) => {
   try {
-    const { q = "", limit: limitRaw = 200, page: pageRaw = 1 } = req.query;
+    const { q = "", limit: limitRaw = 200, page: pageRaw = 1, all = "false" } = req.query;
     const limit = Math.min(500, Math.max(1, parseInt(limitRaw, 10) || 200));
     const page = Math.max(1, parseInt(pageRaw, 10) || 1);
     const skip = (page - 1) * limit;
@@ -142,6 +148,15 @@ export const getDoctors = async (req, res) => {
     if (q && typeof q === "string" && q.trim()) {
       const re = new RegExp(q.trim(), "i");
       match.$or = [{ name: re }, { specialization: re }, { email: re }];
+    }
+
+    // STRICT REQUIREMENT: Only doctors who have created their account with a verified email are shown on the patient portal
+    if (all !== "true") {
+      match.$and = [
+        { clerkId: { $ne: null, $exists: true } },
+        { $or: [{ emailVerified: true }, { isVerified: true }] },
+        { approvalStatus: { $ne: "Rejected" } }
+      ];
     }
 
     // Standard list find
@@ -308,6 +323,8 @@ export const clerkDoctorAuth = async (req, res) => {
     let needsSave = false;
     if (clerkId && doc.clerkId !== clerkId) {
       doc.clerkId = clerkId;
+      doc.emailVerified = true;
+      doc.isRegisteredAccount = true;
       needsSave = true;
     }
     if (avatar && !doc.imageUrl) {
@@ -366,6 +383,10 @@ export const clerkDoctorLink = async (req, res) => {
     }
 
     doc.clerkId = clerkId;
+    doc.isVerified = true;
+    doc.emailVerified = true;
+    doc.isRegisteredAccount = true;
+    doc.approvalStatus = "Approved";
     if (!doc.password.startsWith("$2")) {
       const salt = await bcrypt.genSalt(10);
       doc.password = await bcrypt.hash(password, salt);
@@ -433,6 +454,9 @@ export const clerkDoctorRegister = async (req, res) => {
       patients: "100+",
       rating: 5.0,
       isVerified: true,
+      emailVerified: true,
+      isRegisteredAccount: true,
+      approvalStatus: "Approved",
     });
 
     await doc.save();
@@ -474,4 +498,50 @@ export const deleteDoctor = async (req, res) => {
   }
 };
 
+// Update doctor approval and verification status (from Admin)
+export const updateDoctorApproval = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approvalStatus, isVerified } = req.body || {};
 
+    const validStatuses = ["Approved", "Pending", "Rejected"];
+    const update = {};
+
+    if (approvalStatus) {
+      if (!validStatuses.includes(approvalStatus)) {
+        return res.status(400).json({ success: false, message: "Invalid approval status. Allowed: Approved, Pending, Rejected" });
+      }
+      update.approvalStatus = approvalStatus;
+      if (approvalStatus === "Approved") {
+        update.isVerified = true;
+      } else if (approvalStatus === "Rejected") {
+        update.isVerified = false;
+      }
+    }
+
+    if (isVerified !== undefined) {
+      update.isVerified = Boolean(isVerified);
+      if (!approvalStatus) {
+        update.approvalStatus = update.isVerified ? "Approved" : "Pending";
+      }
+    }
+
+    const doc = await Doctor.findByIdAndUpdate(id, update, { new: true });
+    if (!doc) {
+      return res.status(404).json({ success: false, message: "Doctor not found" });
+    }
+
+    const out = normalizeDocForClient(doc);
+    delete out.password;
+
+    return res.json({
+      success: true,
+      message: `Doctor ${out.name} status updated to ${out.approvalStatus}`,
+      data: out,
+      doctor: out,
+    });
+  } catch (err) {
+    console.error("updateDoctorApproval error:", err);
+    return res.status(500).json({ success: false, message: "Failed to update doctor approval status" });
+  }
+};

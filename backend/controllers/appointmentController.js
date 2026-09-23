@@ -4,19 +4,7 @@ import Doctor from "../models/Doctor.js";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const MAJOR_ADMIN_ID = "admin_default";
 
-const safeNumber = (v) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
 
-const buildFrontendBase = (req) => {
-  if (FRONTEND_URL) return FRONTEND_URL.replace(/\/$/, "");
-  const origin = req.get("origin") || req.get("referer");
-  if (origin) return origin.replace(/\/$/, "");
-  const host = req.get("host");
-  if (host) return `${req.protocol || "http"}://${host}`.replace(/\/$/, "");
-  return null;
-};
 
 // Get appointments (with filter)
 export const getAppointments = async (req, res) => {
@@ -164,7 +152,6 @@ export const createAppointment = async (req, res) => {
       });
     } else {
       // Online payment
-      const frontBase = buildFrontendBase(req);
       const session_id = `mock_sess_${Date.now()}`;
       created = await Appointment.create({
         ...base,
@@ -282,7 +269,7 @@ export const cancelAppointment = async (req, res) => {
 
     const updated = await Appointment.findByIdAndUpdate(
       id,
-      { status: "Canceled", "payment.status": appt.payment.status === "Paid" ? "Refunded" : "Failed" },
+      { status: "Canceled", "payment.status": appt.payment?.status === "Paid" ? "Refunded" : "Failed" },
       { new: true }
     );
 
@@ -358,3 +345,253 @@ export const getAppointmentsByDoctor = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// Get comprehensive admin analytics (KPIs, 30-day timeline, doctor workload, specialty breakdown)
+export const getAdminAnalytics = async (req, res) => {
+  try {
+    const totalAppointments = await Appointment.countDocuments();
+    const completed = await Appointment.countDocuments({ 
+      status: { $in: ["Completed", "complete", "Confirmed"] } 
+    });
+    const canceled = await Appointment.countDocuments({ 
+      status: { $in: ["Canceled", "canceled", "cancelled"] } 
+    });
+    const pending = Math.max(0, totalAppointments - (completed + canceled));
+
+    const paidAgg = await Appointment.aggregate([
+      { $match: { "payment.status": { $in: ["Paid", "paid"] } } },
+      { $group: { _id: null, total: { $sum: "$fees" } } }
+    ]);
+    const revenue = (paidAgg[0] && paidAgg[0].total) || 0;
+
+    const avgFee = totalAppointments > 0 ? Math.round(revenue / (completed || 1)) : 0;
+    const completionRate = totalAppointments > 0 ? Math.round((completed / totalAppointments) * 100) : 100;
+
+    // Daily timeline for past 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysStr = thirtyDaysAgo.toISOString().split("T")[0];
+
+    const timelineAgg = await Appointment.aggregate([
+      { $match: { date: { $gte: thirtyDaysStr } } },
+      {
+        $group: {
+          _id: "$date",
+          bookings: { $sum: 1 },
+          completed: {
+            $sum: {
+              $cond: [{ $in: ["$status", ["Completed", "complete", "Confirmed"]] }, 1, 0]
+            }
+          },
+          revenue: {
+            $sum: {
+              $cond: [{ $eq: ["$payment.status", "Paid"] }, "$fees", 0]
+            }
+          }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    const timelineMap = new Map();
+    timelineAgg.forEach((t) => {
+      if (t._id) timelineMap.set(t._id, t);
+    });
+
+    const timeline = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const ds = d.toISOString().split("T")[0];
+      const match = timelineMap.get(ds);
+      timeline.push({
+        date: ds,
+        label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        bookings: match ? match.bookings : 0,
+        completed: match ? match.completed : 0,
+        revenue: match ? match.revenue : 0
+      });
+    }
+
+    // Doctor workload distribution
+    const doctors = await Doctor.find({}).select("name specialization fee imageUrl availability approvalStatus isVerified");
+    const docWorkloadAgg = await Appointment.aggregate([
+      {
+        $group: {
+          _id: "$doctorId",
+          total: { $sum: 1 },
+          completed: {
+            $sum: { $cond: [{ $in: ["$status", ["Completed", "complete", "Confirmed"]] }, 1, 0] }
+          },
+          canceled: {
+            $sum: { $cond: [{ $in: ["$status", ["Canceled", "canceled", "cancelled"]] }, 1, 0] }
+          },
+          revenue: {
+            $sum: { $cond: [{ $eq: ["$payment.status", "Paid"] }, "$fees", 0] }
+          }
+        }
+      }
+    ]);
+
+    const workloadMap = new Map();
+    docWorkloadAgg.forEach((w) => {
+      if (w._id) workloadMap.set(String(w._id), w);
+    });
+
+    const doctorWorkload = doctors.map((doc) => {
+      const stats = workloadMap.get(String(doc._id)) || { total: 0, completed: 0, canceled: 0, revenue: 0 };
+      const docRevenue = stats.revenue > 0 ? stats.revenue : stats.completed * (doc.fee || 500);
+      return {
+        id: doc._id,
+        name: doc.name,
+        specialization: doc.specialization || "General",
+        imageUrl: doc.imageUrl || "",
+        fee: doc.fee || 0,
+        availability: doc.availability || "Available",
+        approvalStatus: doc.approvalStatus || "Approved",
+        isVerified: doc.isVerified ?? true,
+        totalAppointments: stats.total,
+        completed: stats.completed,
+        canceled: stats.canceled,
+        revenue: docRevenue,
+        completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 100
+      };
+    }).sort((a, b) => b.totalAppointments - a.totalAppointments);
+
+    // Specialty breakdown
+    const specialtyMap = {};
+    doctorWorkload.forEach((d) => {
+      const spec = d.specialization || "General";
+      if (!specialtyMap[spec]) {
+        specialtyMap[spec] = { specialty: spec, doctorCount: 0, bookings: 0, revenue: 0 };
+      }
+      specialtyMap[spec].doctorCount += 1;
+      specialtyMap[spec].bookings += d.totalAppointments;
+      specialtyMap[spec].revenue += d.revenue;
+    });
+    const specialtyBreakdown = Object.values(specialtyMap).sort((a, b) => b.bookings - a.bookings);
+
+    return res.json({
+      success: true,
+      analytics: {
+        kpis: {
+          totalAppointments,
+          completed,
+          canceled,
+          pending,
+          revenue,
+          avgFee,
+          completionRate,
+          totalDoctors: doctors.length,
+          approvedDoctors: doctors.filter(d => d.approvalStatus === "Approved").length,
+          pendingDoctors: doctors.filter(d => d.approvalStatus === "Pending").length,
+        },
+        timeline,
+        doctorWorkload,
+        specialtyBreakdown,
+        statusBreakdown: [
+          { status: "Completed", count: completed, color: "#10B981" },
+          { status: "Pending", count: pending, color: "#F59E0B" },
+          { status: "Canceled", count: canceled, color: "#EF4444" },
+        ]
+      }
+    });
+  } catch (err) {
+    console.error("getAdminAnalytics error:", err);
+    return res.status(500).json({ success: false, message: "Failed to generate admin analytics" });
+  }
+};
+
+// Get analytics for a specific doctor
+export const getDoctorAnalytics = async (req, res) => {
+  try {
+    const { id: doctorId } = req.params;
+    const doc = await Doctor.findById(doctorId).select("name specialization fee availability approvalStatus");
+
+    const totalAppointments = await Appointment.countDocuments({ doctorId });
+    const completed = await Appointment.countDocuments({
+      doctorId,
+      status: { $in: ["Completed", "complete", "Confirmed"] }
+    });
+    const canceled = await Appointment.countDocuments({
+      doctorId,
+      status: { $in: ["Canceled", "canceled", "cancelled"] }
+    });
+    const pending = Math.max(0, totalAppointments - (completed + canceled));
+
+    const paidAgg = await Appointment.aggregate([
+      { $match: { doctorId, "payment.status": "Paid" } },
+      { $group: { _id: null, total: { $sum: "$fees" } } }
+    ]);
+    const feePerConsult = doc?.fee || 500;
+    const revenue = (paidAgg[0] && paidAgg[0].total) || (completed * feePerConsult);
+    const completionRate = totalAppointments > 0 ? Math.round((completed / totalAppointments) * 100) : 100;
+
+    // Past 7 days timeline
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysStr = sevenDaysAgo.toISOString().split("T")[0];
+
+    const timelineAgg = await Appointment.aggregate([
+      { $match: { doctorId, date: { $gte: sevenDaysStr } } },
+      {
+        $group: {
+          _id: "$date",
+          bookings: { $sum: 1 },
+          completed: {
+            $sum: { $cond: [{ $in: ["$status", ["Completed", "complete", "Confirmed"]] }, 1, 0] }
+          },
+          revenue: {
+            $sum: { $cond: [{ $eq: ["$payment.status", "Paid"] }, "$fees", feePerConsult] }
+          }
+        }
+      }
+    ]);
+
+    const timelineMap = new Map();
+    timelineAgg.forEach((t) => {
+      if (t._id) timelineMap.set(t._id, t);
+    });
+
+    const weeklyActivity = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const ds = d.toISOString().split("T")[0];
+      const match = timelineMap.get(ds);
+      weeklyActivity.push({
+        date: ds,
+        day: d.toLocaleDateString("en-US", { weekday: "short" }),
+        bookings: match ? match.bookings : 0,
+        completed: match ? match.completed : 0,
+        revenue: match ? match.revenue : 0
+      });
+    }
+
+    return res.json({
+      success: true,
+      analytics: {
+        doctorName: doc?.name || "Doctor",
+        specialization: doc?.specialization || "General",
+        kpis: {
+          totalAppointments,
+          completed,
+          canceled,
+          pending,
+          revenue,
+          completionRate
+        },
+        weeklyActivity,
+        statusBreakdown: [
+          { status: "Completed", count: completed, color: "#10B981" },
+          { status: "Pending", count: pending, color: "#F59E0B" },
+          { status: "Canceled", count: canceled, color: "#EF4444" },
+        ]
+      }
+    });
+  } catch (err) {
+    console.error("getDoctorAnalytics error:", err);
+    return res.status(500).json({ success: false, message: "Failed to generate doctor analytics" });
+  }
+};
+

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { 
-  Phone, Mail, MapPin, Activity, Send, Heart, Loader2,
+  Phone, Mail, MapPin, Activity, Send, Heart, Loader2, CheckCircle2, AlertCircle,
   Facebook, Twitter, Instagram, Linkedin, Youtube 
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -11,23 +11,36 @@ import { footerStyles } from "../../assets/themeStyles.js";
 export default function Footer() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+
+  const showFeedback = (type, message) => {
+    setFeedback({ type, message });
+    setTimeout(() => {
+      setFeedback((curr) => (curr?.message === message ? null : curr));
+    }, 5000);
+  };
 
   const handleSubscribe = async (e) => {
-    if (e) e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     const trimmed = (email || "").trim();
 
     if (!trimmed) {
-      toast.error("Please enter your email address");
+      const msg = "Please enter your email address";
+      toast.error(msg);
+      showFeedback("error", msg);
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmed)) {
-      toast.error("Please enter a valid email address");
+      const msg = "Please enter a valid email address";
+      toast.error(msg);
+      showFeedback("error", msg);
       return;
     }
 
     setSubmitting(true);
+    setFeedback(null);
     try {
       const res = await fetch(`${API_BASE}/api/newsletter/subscribe`, {
         method: "POST",
@@ -36,14 +49,20 @@ export default function Footer() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        toast.success(data.message || "Thank you for subscribing to MediCare Health Tips!");
+        const msg = data.message || "Thank you for subscribing to MediCare Health Tips!";
+        toast.success(msg);
+        showFeedback("success", msg);
         setEmail("");
       } else {
-        toast.error(data.message || "Subscription failed. Please try again.");
+        const msg = data.message || "Subscription failed. Please try again.";
+        toast.error(msg);
+        showFeedback("error", msg);
       }
     } catch (err) {
       console.error("Newsletter subscription error:", err);
-      toast.error("Network error subscribing to newsletter");
+      const msg = "Network error subscribing to newsletter";
+      toast.error(msg);
+      showFeedback("error", msg);
     } finally {
       setSubmitting(false);
     }
@@ -200,6 +219,7 @@ export default function Footer() {
                   />
                   <button 
                     type="submit" 
+                    onClick={handleSubscribe}
                     disabled={submitting}
                     className={`${footerStyles.mobileSubscribeButton} ${submitting ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
                   >
@@ -224,6 +244,7 @@ export default function Footer() {
                   />
                   <button 
                     type="submit" 
+                    onClick={handleSubscribe}
                     disabled={submitting}
                     className={`${footerStyles.desktopSubscribeButton} ${submitting ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
                   >
@@ -238,21 +259,42 @@ export default function Footer() {
                   </button>
                 </form>
 
+                {/* Inline Feedback Message */}
+                {feedback && (
+                  <div
+                    className={`mt-3 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium flex items-center gap-2 shadow-sm transition-all duration-300 ${
+                      feedback.type === "success"
+                        ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                        : "bg-rose-50 text-rose-700 border border-rose-300"
+                    }`}
+                  >
+                    {feedback.type === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                    )}
+                    <span>{feedback.message}</span>
+                  </div>
+                )}
+
                 {/* Social Media Link Icons */}
                 <div className={footerStyles.socialContainer}>
-                  {socialLinks.map(({ Icon, color, name, href }, index) => (
-                    <a
-                      key={name}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={footerStyles.socialLink}
-                      style={{ animationDelay: `${index * 120}ms` }}
-                    >
-                      <div className={footerStyles.socialIconBackground} />
-                      <Icon className={`${footerStyles.socialIcon} ${color}`} />
-                    </a>
-                  ))}
+                  {socialLinks.map((social, index) => {
+                    const SocialIcon = social.Icon;
+                    return (
+                      <a
+                        key={social.name}
+                        href={social.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={footerStyles.socialLink}
+                        style={{ animationDelay: `${index * 120}ms` }}
+                      >
+                        <div className={footerStyles.socialIconBackground} />
+                        <SocialIcon className={`${footerStyles.socialIcon} ${social.color}`} />
+                      </a>
+                    );
+                  })}
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Search, ShieldAlert, Award, Calendar, BadgeIndianRupee, Users, CheckCircle, XCircle } from "lucide-react";
+import { Search, Award, Calendar, BadgeIndianRupee, Users, CheckCircle, XCircle, Activity, ShieldCheck } from "lucide-react";
 import { dashboardStyles } from "../../assets/themeStyles.js";
+import { TimelineAreaChart, WorkloadBarChart, DonutStatusChart } from "../Analytics/InteractiveCharts.jsx";
 
 const s = dashboardStyles;
 import { API_BASE } from "../../config.js";
@@ -53,6 +54,29 @@ export default function DashboardPage() {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [analytics, setAnalytics] = useState(null);
+  const [timelineMetric, setTimelineMetric] = useState("revenue");
+  const [timelineRange, setTimelineRange] = useState(30);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadAnalytics() {
+      try {
+        const res = await fetch(`${API_BASE}/api/appointments/analytics/admin`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (mounted && json.success && json.analytics) {
+          setAnalytics(json.analytics);
+        }
+      } catch (err) {
+        console.error("loadAnalytics error:", err);
+      }
+    }
+    loadAnalytics();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -60,7 +84,7 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/doctors?limit=200`);
+        const res = await fetch(`${API_BASE}/api/doctors?limit=200&all=true`);
         if (!res.ok) throw new Error(`Failed to fetch doctors (${res.status})`);
         const json = await res.json();
         
@@ -127,7 +151,9 @@ export default function DashboardPage() {
         if (mounted && json.stats) {
           setStats(json.stats);
         }
-      } catch (e) {}
+      } catch {
+        // ignore stats load error
+      }
     }
     loadStats();
     return () => {
@@ -243,6 +269,85 @@ export default function DashboardPage() {
                 <p className={s.statLabel}>Canceled</p>
                 <h4 className={s.statValue}>{totals.canceled}</h4>
               </div>
+            </div>
+          </div>
+
+          {/* Card 6: Registered Patients */}
+          <div className={s.statCard}>
+            <div className={s.statCardContent}>
+              <div className={s.statIconContainer}>
+                <Users className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className={s.statLabel}>Total Patients</p>
+                <h4 className={s.statValue}>{patientCountLoading ? "..." : patientCount}</h4>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Interactive Analytics Section: Timeline Area & Status Donut */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="lg:col-span-2">
+            <TimelineAreaChart
+              data={analytics?.timeline || []}
+              metric={timelineMetric}
+              onMetricChange={setTimelineMetric}
+              timeRange={timelineRange}
+              onTimeRangeChange={setTimelineRange}
+            />
+          </div>
+          <div className="lg:col-span-1">
+            <DonutStatusChart
+              statusBreakdown={analytics?.statusBreakdown || [
+                { status: "Completed", count: totals.completed, color: "#10B981" },
+                { status: "Pending", count: Math.max(0, totals.totalAppointments - totals.completed - totals.canceled), color: "#F59E0B" },
+                { status: "Canceled", count: totals.canceled, color: "#EF4444" },
+              ]}
+              total={totals.totalAppointments}
+            />
+          </div>
+        </div>
+
+        {/* Workload Roster & Specialty Breakdown */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="lg:col-span-2">
+            <WorkloadBarChart doctors={analytics?.doctorWorkload || doctors} />
+          </div>
+          <div className="lg:col-span-1 bg-white/90 backdrop-blur-md rounded-3xl p-5 sm:p-6 border border-emerald-100 shadow-xl shadow-emerald-900/5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-emerald-50">
+                <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                  <Activity className="w-4 h-4" />
+                </span>
+                <h3 className="text-base sm:text-lg font-bold text-slate-800">
+                  Specialty Breakdown
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                Distribution of consultation demands across specialties.
+              </p>
+              <div className="space-y-2.5">
+                {(analytics?.specialtyBreakdown || []).slice(0, 5).map((spec, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 border border-slate-100 text-xs">
+                    <div>
+                      <span className="font-semibold text-slate-700">{spec.specialty}</span>
+                      <span className="text-[10px] text-slate-400 block">{spec.doctorCount} doctors on roster</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-emerald-800">{spec.bookings} consults</span>
+                      <span className="text-[10px] text-slate-500 block">₹{spec.revenue.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-emerald-50 flex items-center justify-between text-xs">
+              <span className="text-slate-500">Platform Approval Status</span>
+              <span className="font-bold text-emerald-700 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                {analytics?.kpis?.approvedDoctors ?? totals.totalDoctors} Verified
+              </span>
             </div>
           </div>
         </div>

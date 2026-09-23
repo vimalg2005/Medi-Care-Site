@@ -146,6 +146,7 @@ function sortSlotsForDisplay(slots = []) {
 
   useEffect(() => {
     fetchServices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function convertSlotsForUI(slotStrings = []) {
@@ -170,7 +171,7 @@ function sortSlotsForDisplay(slots = []) {
       }
 
       const isoMatch = raw.match(
-        /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?)?/
+        /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?/
       );
       if (isoMatch) {
         const datePart = isoMatch[1];
@@ -243,7 +244,7 @@ function sortSlotsForDisplay(slots = []) {
         }
       }
       return out;
-    } catch (e) {
+    } catch {
       return [];
     }
   }
@@ -261,7 +262,7 @@ function sortSlotsForDisplay(slots = []) {
     const raw = String(timeStr);
 
     const isoMatch = raw.match(
-      /[T\s](\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/
+      /[T\s](\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/
     );
     if (isoMatch) {
       const hh24 = Number(isoMatch[1]);
@@ -305,7 +306,8 @@ function sortSlotsForDisplay(slots = []) {
         if (res.ok && body) {
           latest = body.data || body.service || body;
         }
-      } catch (e) {
+      } catch {
+        // ignore error
       }
     }
 
@@ -320,7 +322,9 @@ function sortSlotsForDisplay(slots = []) {
       ).join("\n"),
       price: latest.price ?? latest.fee ?? 0,
       available:
-        latest.available ?? latest.availability === "Available" ?? true,
+        latest.available !== undefined
+          ? Boolean(latest.available)
+          : latest.availability === "Available",
       imagePreview: latest.imageUrl || latest.image || latest.imageSrc || "",
       imageFile: null,
       slots: sortSlotsForDisplay(
@@ -565,7 +569,9 @@ function sortSlotsForDisplay(slots = []) {
     if (editForm?.imagePreview && editForm.imagePreview.startsWith("blob:")) {
       try {
         URL.revokeObjectURL(editForm.imagePreview);
-      } catch (err) {}
+      } catch {
+        // ignore revoke error
+      }
     }
     const url = URL.createObjectURL(f);
     setEditForm((prev) => ({ ...prev, imagePreview: url, imageFile: f }));
@@ -590,7 +596,6 @@ function sortSlotsForDisplay(slots = []) {
 
   function updateSlot(slotId, field, value) {
     setEditForm((p) => {
-      const oldSlot = (p.slots || []).find((s) => s.id === slotId) || {};
       if (field === "date" && value) {
         if (value < todayISO) {
           addToast(

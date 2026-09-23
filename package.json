@@ -1,0 +1,21 @@
+{
+  "name": "medicare-site",
+  "version": "1.0.0",
+  "description": "A professional medical console and doctor-patient scheduling application.",
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend,admin\" -c \"blue,green,magenta\" \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\" \"npm run dev --prefix admin\"",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:admin": "npm run dev --prefix admin",
+    "start": "npm run dev",
+    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend && npm install --prefix admin"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vimalg2005/Medi-Care-Site.git"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

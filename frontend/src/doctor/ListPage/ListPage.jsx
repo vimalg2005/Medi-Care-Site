@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import { 
   Calendar, CheckCircle, XCircle, Users, Phone, Search, X, Clock 
 } from "lucide-react";
@@ -311,7 +311,7 @@ export default function ListPage() {
   const params = useParams();
   const doctorId = params.id;
 
-  async function fetchAppointments() {
+  const fetchAppointments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -343,11 +343,11 @@ export default function ListPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [doctorId]);
 
   useEffect(() => {
     fetchAppointments();
-  }, [doctorId]);
+  }, [fetchAppointments]);
 
   async function updateStatusRemote(id, newStatus) {
     const appt = appointments.find((p) => p.id === id);

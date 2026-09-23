@@ -35,7 +35,6 @@ export const openRazorpayModal = async ({
   appointmentId,
   type = "doctor",
   patient = {},
-  amount,
   title = "MediCare Health Consultation",
   onSuccess,
   onError,
